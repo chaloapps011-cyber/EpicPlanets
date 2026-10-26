@@ -1,19 +1,24 @@
+
 --[[
     EPIC PLANETS
-    GUI + 321 Fragments + 4 Orbiting Planets
-    Delta Executor | Android
+    Dark GUI + Fluid Rainbow Aura
+    321 Fragments + 4 Orbiting Planets
+    Delta Android
+
+    Files:
+    epicplanets/Modules/*.lua
 ]]
 
 local ENV = (type(getgenv) == "function" and getgenv()) or _G
 
--- ANTI-DUPLICAÇÃO
 if ENV.__EPIC_PLANETS_RUNNING then
-    local oldGui = ENV.__EPIC_PLANETS_GUI
-    if oldGui and oldGui.Parent then
-        oldGui.Enabled = true
+    local old = ENV.__EPIC_PLANETS_GUI
+    if old and old.Parent then
+        old.Enabled = true
     end
     return
 end
+
 ENV.__EPIC_PLANETS_RUNNING = true
 
 local success, err = pcall(function()
@@ -29,42 +34,55 @@ local success, err = pcall(function()
     local old = playerGui:FindFirstChild("EPIC_PLANETS_GUI")
     if old then old:Destroy() end
 
-    -- CONFIGURAÇÃO DE ARQUIVOS
-    local ROOT = "EpicPlanets"
-    local MODULES = ROOT .. "/Movesets"
+    -- DELTA WORKSPACE FILES
+    -- The executor's file APIs normally resolve paths
+    -- relative to its workspace directory.
+    local ROOT = "epicplanets"
+    local MODULES = ROOT .. "/Modules"
     local SETTINGS = ROOT .. "/settings.json"
 
     local function fileCall(name, ...)
         local fn = ENV[name] or _G[name]
-        if type(fn) ~= "function" then return false end
+        if type(fn) ~= "function" then
+            return false
+        end
         return pcall(fn, ...)
     end
 
-    pcall(function()
-        if type(isfolder) ~= "function" or not isfolder(ROOT) then
-            fileCall("makefolder", ROOT)
-        end
-        if type(isfolder) ~= "function" or not isfolder(MODULES) then
-            fileCall("makefolder", MODULES)
-        end
-    end)
+    local function createFolder(path)
+        local check = ENV.isfolder or _G.isfolder
 
+        if type(check) == "function" then
+            local ok, exists = pcall(check, path)
+            if ok and exists then
+                return true
+            end
+        end
+
+        return fileCall("makefolder", path)
+    end
+
+    createFolder(ROOT)
+    createFolder(MODULES)
+
+    -- DARK THEME
     local C = {
-        bg = Color3.fromRGB(7, 9, 19),
-        panel = Color3.fromRGB(17, 21, 38),
-        panel2 = Color3.fromRGB(26, 33, 55),
-        blue = Color3.fromRGB(35, 145, 255),
-        white = Color3.fromRGB(240, 245, 255),
-        muted = Color3.fromRGB(150, 165, 190),
+        bg = Color3.fromRGB(7, 7, 10),
+        panel = Color3.fromRGB(15, 15, 20),
+        panel2 = Color3.fromRGB(25, 25, 32),
+        white = Color3.fromRGB(245, 245, 250),
+        muted = Color3.fromRGB(155, 155, 170),
         red = Color3.fromRGB(255, 55, 70),
         green = Color3.fromRGB(65, 240, 140),
         purple = Color3.fromRGB(175, 95, 255),
     }
 
     local titles = {
-        {name = "Epic Planets", color = C.blue},
-        {name = "please don't touch In builtinmodules", color = C.white},
-        {name = "BLUEEEEEE", color = Color3.fromRGB(0, 125, 255)},
+        {name = "Epic Planets", color = C.white},
+        {name = "please don't touch In builtinmodules",
+            color = C.white},
+        {name = "BLUEEEEEE",
+            color = Color3.fromRGB(0, 125, 255)},
         {name = "F up", color = C.red},
         {name = "April!", color = C.green},
         {name = "Dont kill the script", color = C.white},
@@ -72,56 +90,69 @@ local success, err = pcall(function()
 
     local titleIndex = 1
 
-    -- RECUPERAR TÍTULO SALVO
     pcall(function()
+        local isfile = ENV.isfile or _G.isfile
+        local readfile = ENV.readfile or _G.readfile
+
         if type(isfile) == "function"
             and type(readfile) == "function"
             and isfile(SETTINGS) then
 
-            local data = HttpService:JSONDecode(readfile(SETTINGS))
-            local idx = tonumber(data.titleIndex)
+            local data = HttpService:JSONDecode(
+                readfile(SETTINGS)
+            )
 
-            if idx and titles[idx] then
-                titleIndex = idx
+            local index = tonumber(data.titleIndex)
+            if index and titles[index] then
+                titleIndex = index
             end
         end
     end)
 
     local function saveTitle()
         pcall(function()
-            fileCall("writefile", SETTINGS, HttpService:JSONEncode({
-                titleIndex = titleIndex,
-                title = titles[titleIndex].name,
-            }))
+            fileCall("writefile", SETTINGS,
+                HttpService:JSONEncode({
+                    titleIndex = titleIndex,
+                    title = titles[titleIndex].name,
+                })
+            )
         end)
     end
 
     -- GUI HELPERS
     local function make(class, props, parent)
         local obj = Instance.new(class)
-        for k, v in pairs(props or {}) do
-            obj[k] = v
+
+        for key, value in pairs(props or {}) do
+            obj[key] = value
         end
+
         obj.Parent = parent
         return obj
     end
 
     local function round(obj, radius)
         make("UICorner", {
-            CornerRadius = UDim.new(0, radius or 10)
+            CornerRadius = UDim.new(0, radius or 10),
         }, obj)
     end
 
-    local function outline(obj, color, transparency)
-        make("UIStroke", {
-            Color = color or C.blue,
-            Thickness = 1,
-            Transparency = transparency or 0.3
+    local rainbowStrokes = {}
+
+    local function outline(obj, transparency)
+        local stroke = make("UIStroke", {
+            Color = Color3.fromRGB(255, 60, 130),
+            Thickness = 1.5,
+            Transparency = transparency or 0.15,
         }, obj)
+
+        table.insert(rainbowStrokes, stroke)
+        return stroke
     end
 
     local function tween(obj, duration, props, style)
-        local t = TweenService:Create(
+        local animation = TweenService:Create(
             obj,
             TweenInfo.new(
                 duration,
@@ -130,8 +161,9 @@ local success, err = pcall(function()
             ),
             props
         )
-        t:Play()
-        return t
+
+        animation:Play()
+        return animation
     end
 
     local gui = make("ScreenGui", {
@@ -144,6 +176,7 @@ local success, err = pcall(function()
 
     ENV.__EPIC_PLANETS_GUI = gui
 
+    -- FULL-SCREEN INTRO BACKGROUND
     local bg = make("Frame", {
         Name = "Background",
         Size = UDim2.fromScale(1, 1),
@@ -151,9 +184,11 @@ local success, err = pcall(function()
         BorderSizePixel = 0,
     }, gui)
 
-    -- ESTRELAS
+    local stars = {}
+
     for i = 1, 65 do
         local dot = make("Frame", {
+            Name = "Star",
             Position = UDim2.fromScale(
                 math.random(1, 99) / 100,
                 math.random(1, 99) / 100
@@ -162,28 +197,28 @@ local success, err = pcall(function()
                 math.random(1, 3),
                 math.random(1, 3)
             ),
-            BackgroundColor3 = i % 4 == 0 and C.blue or C.white,
+            BackgroundColor3 = C.white,
             BackgroundTransparency = math.random(20, 70) / 100,
             BorderSizePixel = 0,
         }, bg)
+
         round(dot, 5)
+        table.insert(stars, dot)
     end
 
-    -- CABEÇALHO ASCII
-    make("TextLabel", {
+    local ascii = make("TextLabel", {
+        Name = "AsciiHeader",
         Position = UDim2.new(0, 0, 0, 8),
-        Size = UDim2.new(1, 0, 0, 35),
+        Size = UDim2.new(1, 0, 0, 30),
         BackgroundTransparency = 1,
-        Text = [[
- _____ ____ ___ ____   ____  _       ____  _       _   _ _____ _____
-        ]],
-        TextColor3 = C.blue,
-        TextSize = 9,
+        Text = "E P I C   P L A N E T S",
+        TextColor3 = C.white,
+        TextSize = 13,
         Font = Enum.Font.Code,
     }, bg)
 
     local titleLabel = make("TextLabel", {
-        Position = UDim2.new(0, 8, 0, 43),
+        Position = UDim2.new(0, 8, 0, 39),
         Size = UDim2.new(1, -16, 0, 32),
         BackgroundTransparency = 1,
         Text = titles[titleIndex].name,
@@ -192,6 +227,7 @@ local success, err = pcall(function()
         Font = Enum.Font.GothamBlack,
     }, bg)
 
+    -- INTRO PANEL
     local panel = make("Frame", {
         Name = "IntroPanel",
         AnchorPoint = Vector2.new(0.5, 0.5),
@@ -207,7 +243,7 @@ local success, err = pcall(function()
     }, panel)
 
     round(panel, 18)
-    outline(panel, C.blue)
+    outline(panel)
 
     local status = make("TextLabel", {
         Position = UDim2.new(0, 12, 0, 10),
@@ -219,7 +255,7 @@ local success, err = pcall(function()
         Font = Enum.Font.GothamBold,
     }, panel)
 
-    -- QUATRO PLANETAS ORBITANDO
+    -- FOUR ORBITING PLANETS
     local orbit = make("Frame", {
         AnchorPoint = Vector2.new(0.5, 0),
         Position = UDim2.new(0.5, 0, 0, 43),
@@ -231,32 +267,27 @@ local success, err = pcall(function()
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
         Size = UDim2.fromOffset(27, 27),
-        BackgroundColor3 = C.blue,
+        BackgroundColor3 = C.panel2,
         BorderSizePixel = 0,
     }, orbit)
-    round(center, 20)
-    outline(center, C.white)
 
-    local planetColors = {
-        C.blue,
-        C.purple,
-        C.green,
-        Color3.fromRGB(255, 180, 60),
-    }
+    round(center, 20)
+    outline(center)
 
     local planets = {}
 
     for i = 1, 4 do
-        local p = make("Frame", {
+        local planet = make("Frame", {
             Name = "Planet" .. i,
             AnchorPoint = Vector2.new(0.5, 0.5),
-            Size = UDim2.fromOffset(13 + (i % 2) * 3, 13 + (i % 2) * 3),
-            BackgroundColor3 = planetColors[i],
+            Size = UDim2.fromOffset(15, 15),
+            BackgroundColor3 = Color3.fromHSV(i / 4, 0.85, 1),
             BorderSizePixel = 0,
         }, orbit)
-        round(p, 20)
-        outline(p, C.white, 0.5)
-        planets[i] = p
+
+        round(planet, 20)
+        outline(planet, 0.3)
+        planets[i] = planet
     end
 
     local orbitRing = make("Frame", {
@@ -265,10 +296,11 @@ local success, err = pcall(function()
         Size = UDim2.fromOffset(95, 75),
         BackgroundTransparency = 1,
     }, orbit)
-    round(orbitRing, 50)
-    outline(orbitRing, C.blue, 0.65)
 
-    -- 321 FRAGMENTOS
+    round(orbitRing, 50)
+    outline(orbitRing, 0.25)
+
+    -- 321 FRAGMENTS
     local fragmentArea = make("Frame", {
         Name = "Fragments",
         Position = UDim2.new(0, 10, 0, 165),
@@ -282,7 +314,7 @@ local success, err = pcall(function()
     for i = 1, 321 do
         local size = math.random(2, 5)
 
-        local f = make("Frame", {
+        local fragment = make("Frame", {
             Name = "Fragment" .. i,
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(
@@ -290,12 +322,14 @@ local success, err = pcall(function()
                 math.random(0, 100) / 100
             ),
             Size = UDim2.fromOffset(size, size),
-            BackgroundColor3 = i % 5 == 0 and C.purple or C.blue,
+            BackgroundColor3 = Color3.fromHSV(
+                math.random(), 0.85, 1
+            ),
             BorderSizePixel = 0,
         }, fragmentArea)
 
-        round(f, 5)
-        fragments[i] = f
+        round(fragment, 5)
+        fragments[i] = fragment
     end
 
     local progressBack = make("Frame", {
@@ -304,13 +338,15 @@ local success, err = pcall(function()
         BackgroundColor3 = C.panel2,
         BorderSizePixel = 0,
     }, panel)
+
     round(progressBack, 5)
 
     local progress = make("Frame", {
         Size = UDim2.new(0, 0, 1, 0),
-        BackgroundColor3 = C.blue,
+        BackgroundColor3 = C.white,
         BorderSizePixel = 0,
     }, progressBack)
+
     round(progress, 5)
 
     local countLabel = make("TextLabel", {
@@ -323,9 +359,8 @@ local success, err = pcall(function()
         Font = Enum.Font.Code,
     }, panel)
 
-    -- ÁUDIO OPCIONAL:
-    -- Um MP3 local do Android não pode ser usado diretamente como SoundId.
-    -- Coloque aqui um áudio autorizado e publicado no Roblox.
+    -- OPTIONAL ROBLOX AUDIO ASSET
+    -- Set to a published audio asset ID if available.
     local MUSIC_ID = ""
 
     if MUSIC_ID ~= "" then
@@ -334,16 +369,18 @@ local success, err = pcall(function()
             SoundId = MUSIC_ID,
             Volume = 0.7,
         }, gui)
-        pcall(function() sound:Play() end)
+
+        pcall(function()
+            sound:Play()
+        end)
     end
 
-    -- BOTÃO TAP IN
     local tapIn = make("TextButton", {
         Name = "TapIn",
         AnchorPoint = Vector2.new(0.5, 1),
         Position = UDim2.new(0.5, 0, 1, -51),
         Size = UDim2.new(0.72, 0, 0, 42),
-        BackgroundColor3 = C.blue,
+        BackgroundColor3 = C.panel2,
         BorderSizePixel = 0,
         Text = "T A P   I N",
         TextColor3 = C.white,
@@ -351,74 +388,11 @@ local success, err = pcall(function()
         Font = Enum.Font.GothamBlack,
         Visible = false,
     }, panel)
+
     round(tapIn, 10)
+    outline(tapIn)
 
-    -- ANIMAÇÃO DE CONEXÃO DOS 321 FRAGMENTOS
-    task.spawn(function()
-        local total = #fragments
-
-        for i, f in ipairs(fragments) do
-            local x = ((i - 1) % 29) / 28
-            local y = math.floor((i - 1) / 29) / 11
-
-            tween(f, 0.45 + math.random() * 0.45, {
-                Position = UDim2.fromScale(x, math.clamp(y, 0, 1)),
-            }, Enum.EasingStyle.Quint)
-
-            if i % 5 == 0 or i == total then
-                tween(progress, 0.1, {
-                    Size = UDim2.new(i / total, 0, 1, 0),
-                })
-                countLabel.Text = i .. " / " .. total
-            end
-
-            task.wait(0.002)
-        end
-
-        task.wait(0.65)
-        status.Text = "ALL FRAGMENTS CONNECTED"
-
-        -- FLASH DE CONEXÃO
-        for _, f in ipairs(fragments) do
-            f.BackgroundColor3 = C.white
-        end
-
-        tween(panel, 0.07, {
-            BackgroundColor3 = Color3.fromRGB(100, 125, 185),
-        })
-
-        task.wait(0.09)
-
-        tween(panel, 0.15, {
-            BackgroundColor3 = C.panel,
-        })
-
-        -- SOMENTE FADE-OUT LENTO
-        for _, f in ipairs(fragments) do
-            tween(f, 1.8, {
-                BackgroundTransparency = 1,
-                Size = UDim2.fromOffset(0, 0),
-            }, Enum.EasingStyle.Sine)
-        end
-
-        tween(progress, 1.8, {BackgroundTransparency = 1})
-        tween(countLabel, 1.8, {TextTransparency = 1})
-
-        task.wait(1.9)
-        fragmentArea.Visible = false
-        status.Text = "ALL SYSTEMS READY"
-
-        tapIn.Visible = true
-        tapIn.BackgroundTransparency = 1
-        tapIn.TextTransparency = 1
-
-        tween(tapIn, 0.5, {
-            BackgroundTransparency = 0,
-            TextTransparency = 0,
-        })
-    end)
-
-    -- HUB PRINCIPAL
+    -- MAIN HUB
     local hub = make("Frame", {
         Name = "MainHub",
         AnchorPoint = Vector2.new(0.5, 0.5),
@@ -436,7 +410,7 @@ local success, err = pcall(function()
     }, hub)
 
     round(hub, 18)
-    outline(hub, C.blue)
+    outline(hub)
 
     local hubTitle = make("TextLabel", {
         Position = UDim2.new(0, 12, 0, 9),
@@ -453,14 +427,16 @@ local success, err = pcall(function()
     local close = make("TextButton", {
         Position = UDim2.new(1, -43, 0, 9),
         Size = UDim2.fromOffset(31, 29),
-        BackgroundColor3 = Color3.fromRGB(75, 30, 45),
+        BackgroundColor3 = C.panel2,
         Text = "×",
         TextColor3 = C.white,
         TextSize = 22,
         Font = Enum.Font.GothamBold,
         ZIndex = 22,
     }, hub)
+
     round(close, 8)
+    outline(close)
 
     local titleButton = make("TextButton", {
         Position = UDim2.new(0, 12, 0, 44),
@@ -472,7 +448,9 @@ local success, err = pcall(function()
         Font = Enum.Font.GothamSemibold,
         ZIndex = 21,
     }, hub)
+
     round(titleButton, 8)
+    outline(titleButton)
 
     local list = make("ScrollingFrame", {
         Name = "Options",
@@ -481,7 +459,6 @@ local success, err = pcall(function()
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         ScrollBarThickness = 4,
-        ScrollBarImageColor3 = C.blue,
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         CanvasSize = UDim2.new(0, 0, 0, 0),
         ZIndex = 21,
@@ -492,8 +469,8 @@ local success, err = pcall(function()
         SortOrder = Enum.SortOrder.LayoutOrder,
     }, list)
 
-    local function addButton(text, order, color)
-        local b = make("TextButton", {
+    local function addButton(text, order, color, parent)
+        local button = make("TextButton", {
             Name = "Option" .. order,
             LayoutOrder = order,
             Size = UDim2.new(1, 0, 0, 41),
@@ -504,28 +481,235 @@ local success, err = pcall(function()
             Font = Enum.Font.GothamSemibold,
             AutoButtonColor = true,
             ZIndex = 22,
-        }, list)
-        round(b, 9)
-        outline(b, C.blue, 0.75)
-        return b
+        }, parent)
+
+        round(button, 9)
+        outline(button, 0.2)
+        return button
     end
 
-    local flyButton = addButton("Fly", 1)
-    local speedButton = addButton("Speed", 2)
-    local jumpButton = addButton("Jump", 3)
-    local limbButton = addButton("Limb Reanimation  [RISKY]", 4)
-    local modulesButton = addButton("Modules / Movesets", 5)
-    local storeButton = addButton("Models Store", 6)
+    local flyButton = addButton("Fly", 1, nil, list)
+    local speedButton = addButton("Speed", 2, nil, list)
+    local jumpButton = addButton("Jump", 3, nil, list)
+    local limbButton = addButton(
+        "Limb Reanimation [RISKY]", 4, nil, list
+    )
+    local modulesButton = addButton(
+        "Modules / Movesets", 5, nil, list
+    )
+    local storeButton = addButton("Models Store", 6, nil, list)
     local removeButton = addButton(
         "REMOVER TODOS OS MODELOS",
         7,
-        Color3.fromRGB(85, 27, 40)
+        Color3.fromRGB(65, 22, 32),
+        list
     )
 
     local function setStatus(text)
         status.Text = text
     end
 
+    -- MOVESets PANEL
+    local movesetPanel = make("Frame", {
+        Name = "MovesetPanel",
+        Position = UDim2.fromScale(0, 0),
+        Size = UDim2.fromScale(1, 1),
+        BackgroundColor3 = C.panel,
+        BorderSizePixel = 0,
+        Visible = false,
+        ZIndex = 40,
+    }, hub)
+
+    round(movesetPanel, 16)
+    outline(movesetPanel)
+
+    make("TextLabel", {
+        Position = UDim2.new(0, 12, 0, 8),
+        Size = UDim2.new(1, -24, 0, 28),
+        BackgroundTransparency = 1,
+        Text = "MODULES / MOVESETS",
+        TextColor3 = C.white,
+        TextSize = 15,
+        Font = Enum.Font.GothamBlack,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 41,
+    }, movesetPanel)
+
+    local backButton = make("TextButton", {
+        Position = UDim2.new(1, -58, 0, 8),
+        Size = UDim2.fromOffset(45, 28),
+        BackgroundColor3 = C.panel2,
+        Text = "BACK",
+        TextColor3 = C.white,
+        TextSize = 10,
+        Font = Enum.Font.GothamBold,
+        ZIndex = 42,
+    }, movesetPanel)
+
+    round(backButton, 7)
+    outline(backButton)
+
+    local refreshButton = make("TextButton", {
+        Position = UDim2.new(0, 12, 0, 43),
+        Size = UDim2.new(1, -24, 0, 32),
+        BackgroundColor3 = C.panel2,
+        Text = "REFRESH MODULES",
+        TextColor3 = C.white,
+        TextSize = 11,
+        Font = Enum.Font.GothamBold,
+        ZIndex = 41,
+    }, movesetPanel)
+
+    round(refreshButton, 8)
+    outline(refreshButton)
+
+    local moduleList = make("ScrollingFrame", {
+        Name = "ModuleList",
+        Position = UDim2.new(0, 12, 0, 83),
+        Size = UDim2.new(1, -24, 1, -96),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 4,
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        ZIndex = 41,
+    }, movesetPanel)
+
+    make("UIListLayout", {
+        Padding = UDim.new(0, 7),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, moduleList)
+
+    local function refreshModules()
+        for _, child in ipairs(moduleList:GetChildren()) do
+            if child:IsA("GuiObject")
+                and not child:IsA("UIListLayout") then
+                child:Destroy()
+            end
+        end
+
+        local listfiles = ENV.listfiles or _G.listfiles
+
+        if type(listfiles) ~= "function" then
+            local label = make("TextLabel", {
+                Size = UDim2.new(1, 0, 0, 55),
+                BackgroundTransparency = 1,
+                Text = "Delta listfiles indisponível.\n"
+                    .. "Verifica o suporte a arquivos.",
+                TextColor3 = C.muted,
+                TextSize = 11,
+                TextWrapped = true,
+                ZIndex = 42,
+            }, moduleList)
+
+            return
+        end
+
+        local ok, files = pcall(listfiles, MODULES)
+
+        if not ok or type(files) ~= "table" then
+            make("TextLabel", {
+                Size = UDim2.new(1, 0, 0, 45),
+                BackgroundTransparency = 1,
+                Text = "Não foi possível ler " .. MODULES,
+                TextColor3 = C.muted,
+                TextSize = 11,
+                TextWrapped = true,
+                ZIndex = 42,
+            }, moduleList)
+            return
+        end
+
+        local count = 0
+
+        for _, path in ipairs(files) do
+            if type(path) == "string"
+                and path:lower():match("%.lua$") then
+
+                count += 1
+
+                local name = path:match("[^/\\]+$")
+                    or path
+
+                local button = addButton(
+                    "▶  " .. name,
+                    count,
+                    nil,
+                    moduleList
+                )
+
+                button.Activated:Connect(function()
+                    local readfile = ENV.readfile or _G.readfile
+                    local loadstringFn = ENV.loadstring
+                        or _G.loadstring
+
+                    if type(readfile) ~= "function" then
+                        setStatus("Delta readfile indisponível.")
+                        return
+                    end
+
+                    if type(loadstringFn) ~= "function" then
+                        setStatus("loadstring indisponível.")
+                        return
+                    end
+
+                    local readOk, source = pcall(readfile, path)
+
+                    if not readOk or type(source) ~= "string" then
+                        setStatus("Falha ao ler: " .. name)
+                        return
+                    end
+
+                    local compileOk, fn, compileError =
+                        pcall(loadstringFn, source)
+
+                    if not compileOk or type(fn) ~= "function" then
+                        setStatus("Erro de compilação: " .. name)
+                        warn("[EPIC PLANETS] " .. tostring(compileError))
+                        return
+                    end
+
+                    -- Only run scripts you trust.
+                    local runOk, runError = pcall(fn)
+
+                    if not runOk then
+                        setStatus("Erro no módulo: " .. name)
+                        warn("[EPIC PLANETS] " .. tostring(runError))
+                    else
+                        setStatus("Módulo executado: " .. name)
+                    end
+                end)
+            end
+        end
+
+        if count == 0 then
+            make("TextLabel", {
+                Size = UDim2.new(1, 0, 0, 55),
+                BackgroundTransparency = 1,
+                Text = "Nenhum .lua encontrado.\n"
+                    .. "Coloca teus scripts em " .. MODULES,
+                TextColor3 = C.muted,
+                TextSize = 11,
+                TextWrapped = true,
+                ZIndex = 42,
+            }, moduleList)
+        end
+
+        setStatus("Movesets encontrados: " .. count)
+    end
+
+    modulesButton.Activated:Connect(function()
+        refreshModules()
+        movesetPanel.Visible = true
+    end)
+
+    refreshButton.Activated:Connect(refreshModules)
+
+    backButton.Activated:Connect(function()
+        movesetPanel.Visible = false
+    end)
+
+    -- EXISTING BUTTONS
     flyButton.Activated:Connect(function()
         setStatus("Fly ainda não foi implementado.")
     end)
@@ -539,19 +723,20 @@ local success, err = pcall(function()
     end)
 
     limbButton.Activated:Connect(function()
-        setStatus("Limb Reanimation é arriscado e ainda não foi implementado.")
-    end)
-
-    modulesButton.Activated:Connect(function()
-        setStatus("Movesets: pasta " .. MODULES)
+        setStatus(
+            "Limb Reanimation ainda não foi implementado."
+        )
     end)
 
     storeButton.Activated:Connect(function()
-        setStatus("Loja: Xester V1 listado; código externo não executado.")
+        setStatus(
+            "Models Store: Xester V1 listado; "
+            .. "código externo não executado."
+        )
     end)
 
-    -- O hub remove somente modelos registrados por ele.
-    ENV.__EPIC_PLANETS_MODELS = ENV.__EPIC_PLANETS_MODELS or {}
+    ENV.__EPIC_PLANETS_MODELS =
+        ENV.__EPIC_PLANETS_MODELS or {}
 
     removeButton.Activated:Connect(function()
         local removed = 0
@@ -571,12 +756,10 @@ local success, err = pcall(function()
 
     titleButton.Activated:Connect(function()
         titleIndex = (titleIndex % #titles) + 1
-
         local selected = titles[titleIndex]
 
         titleLabel.Text = selected.name
         titleLabel.TextColor3 = selected.color
-
         hubTitle.Text = selected.name
         hubTitle.TextColor3 = selected.color
         titleButton.Text = selected.name
@@ -584,6 +767,25 @@ local success, err = pcall(function()
 
         saveTitle()
     end)
+
+    -- MINIMIZE TO A TINY FLOATING ICON
+    local mini = make("TextButton", {
+        Name = "EP_Minimized",
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, 8, 0.5, 0),
+        Size = UDim2.fromOffset(34, 34),
+        BackgroundColor3 = C.panel,
+        Text = "EP",
+        TextColor3 = C.white,
+        TextSize = 11,
+        Font = Enum.Font.GothamBlack,
+        Visible = false,
+        ZIndex = 100,
+        AutoButtonColor = true,
+    }, gui)
+
+    round(mini, 17)
+    outline(mini)
 
     tapIn.Activated:Connect(function()
         tween(panel, 0.25, {
@@ -594,6 +796,14 @@ local success, err = pcall(function()
         task.wait(0.27)
 
         panel.Visible = false
+        ascii.Visible = false
+        titleLabel.Visible = false
+        bg.BackgroundTransparency = 1
+
+        for _, star in ipairs(stars) do
+            star.Visible = false
+        end
+
         hub.Visible = true
         hub.BackgroundTransparency = 1
         hub.Size = UDim2.new(0.82, 0, 0.66, 0)
@@ -605,13 +815,24 @@ local success, err = pcall(function()
     end)
 
     close.Activated:Connect(function()
-        tween(bg, 0.25, {BackgroundTransparency = 1})
-        task.wait(0.27)
-        gui.Enabled = false
+        movesetPanel.Visible = false
+        hub.Visible = false
+        mini.Visible = true
     end)
 
-    -- ÓRBITA CONTÍNUA
+    mini.Activated:Connect(function()
+        mini.Visible = false
+        hub.Visible = true
+        hub.Size = UDim2.new(0.82, 0, 0.66, 0)
+
+        tween(hub, 0.25, {
+            Size = UDim2.new(0.88, 0, 0.72, 0),
+        }, Enum.EasingStyle.Back)
+    end)
+
+    -- FLUID RAINBOW AURA + PLANET ORBIT
     local orbitConnection
+
     orbitConnection = RunService.RenderStepped:Connect(function()
         if not gui.Parent then
             orbitConnection:Disconnect()
@@ -620,20 +841,36 @@ local success, err = pcall(function()
 
         local t = os.clock()
 
-        for i, p in ipairs(planets) do
+        for i, stroke in ipairs(rainbowStrokes) do
+            if stroke.Parent then
+                stroke.Color = Color3.fromHSV(
+                    (t * 0.13 + i * 0.075) % 1,
+                    0.88,
+                    1
+                )
+            end
+        end
+
+        for i, planet in ipairs(planets) do
             local angle = t * (0.8 + i * 0.12)
                 + (i - 1) * (math.pi * 2 / 4)
 
-            p.Position = UDim2.fromOffset(
+            planet.Position = UDim2.fromOffset(
                 75 + math.cos(angle) * 43,
                 57 + math.sin(angle) * 34
+            )
+
+            planet.BackgroundColor3 = Color3.fromHSV(
+                (t * 0.12 + i / 4) % 1,
+                0.85,
+                1
             )
         end
 
         center.Rotation = (t * 35) % 360
     end)
 
-    -- ARRASTAR JANELA NO CELULAR
+    -- DRAGGABLE WINDOWS
     local function draggable(frame, handle)
         local dragging = false
         local startInput
@@ -641,14 +878,16 @@ local success, err = pcall(function()
 
         handle.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.Touch
-                or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                or input.UserInputType
+                    == Enum.UserInputType.MouseButton1 then
 
                 dragging = true
                 startInput = input.Position
                 startPosition = frame.Position
 
                 input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
+                    if input.UserInputState
+                        == Enum.UserInputState.End then
                         dragging = false
                     end
                 end)
@@ -659,7 +898,8 @@ local success, err = pcall(function()
             if not dragging then return end
 
             if input.UserInputType == Enum.UserInputType.Touch
-                or input.UserInputType == Enum.UserInputType.MouseMovement then
+                or input.UserInputType
+                    == Enum.UserInputType.MouseMovement then
 
                 local delta = input.Position - startInput
 
@@ -675,9 +915,83 @@ local success, err = pcall(function()
 
     draggable(hub, hubTitle)
     draggable(panel, status)
+    draggable(mini, mini)
+
+    -- INTRO ANIMATION
+    task.spawn(function()
+        local total = #fragments
+
+        for i, fragment in ipairs(fragments) do
+            local x = ((i - 1) % 29) / 28
+            local y = math.floor((i - 1) / 29) / 11
+
+            tween(fragment, 0.45 + math.random() * 0.45, {
+                Position = UDim2.fromScale(
+                    x,
+                    math.clamp(y, 0, 1)
+                ),
+            }, Enum.EasingStyle.Quint)
+
+            if i % 5 == 0 or i == total then
+                tween(progress, 0.1, {
+                    Size = UDim2.new(i / total, 0, 1, 0),
+                })
+
+                countLabel.Text = i .. " / " .. total
+            end
+
+            task.wait(0.002)
+        end
+
+        task.wait(0.65)
+        status.Text = "ALL FRAGMENTS CONNECTED"
+
+        for _, fragment in ipairs(fragments) do
+            fragment.BackgroundColor3 = C.white
+        end
+
+        tween(panel, 0.07, {
+            BackgroundColor3 = Color3.fromRGB(85, 85, 95),
+        })
+
+        task.wait(0.09)
+
+        tween(panel, 0.15, {
+            BackgroundColor3 = C.panel,
+        })
+
+        -- SLOW FADE OUT
+        for _, fragment in ipairs(fragments) do
+            tween(fragment, 1.8, {
+                BackgroundTransparency = 1,
+                Size = UDim2.fromOffset(0, 0),
+            }, Enum.EasingStyle.Sine)
+        end
+
+        tween(progress, 1.8, {
+            BackgroundTransparency = 1,
+        })
+
+        tween(countLabel, 1.8, {
+            TextTransparency = 1,
+        })
+
+        task.wait(1.9)
+
+        fragmentArea.Visible = false
+        status.Text = "ALL SYSTEMS READY"
+        tapIn.Visible = true
+        tapIn.BackgroundTransparency = 1
+        tapIn.TextTransparency = 1
+
+        tween(tapIn, 0.5, {
+            BackgroundTransparency = 0,
+            TextTransparency = 0,
+        })
+    end)
 
     print("[EPIC PLANETS] GUI carregada.")
-    print("[EPIC PLANETS] Pasta de Movesets: " .. MODULES)
+    print("[EPIC PLANETS] Modules: " .. MODULES)
 end)
 
 if not success then
