@@ -940,6 +940,7 @@ local storeQuery = ""
 local storePage = 1
 local storeRequestId = 0
 local storeBusy = false
+local storeStrictMatch = false
 
 UI.Label(ScriptBloxPage, "SCRIPTBLOX STORE", 29, 14, C.Text).Font = Enum.Font.GothamBlack
 info(ScriptBloxPage, "Search community scripts. Review source before using it; this store copies source but never auto-executes it.", 55, C.Muted)
@@ -966,7 +967,19 @@ storeSearchPadding.PaddingLeft = UDim.new(0, 10)
 storeSearchPadding.PaddingRight = UDim.new(0, 8)
 storeSearchPadding.Parent = StoreSearchBox
 
-local StoreStatus = UI.Label(ScriptBloxPage, "Enter a search term or tap TRENDING.", 30, 10, C.Muted)
+local StoreStatus
+local MatchSearchButton = UI.Button(ScriptBloxPage, "MATCH SEARCH: OFF", function(button)
+    storeStrictMatch = not storeStrictMatch
+    button.Text = "MATCH SEARCH: " .. (storeStrictMatch and "ON" or "OFF")
+    button.BackgroundColor3 = storeStrictMatch and C.Blue or C.PanelAlt
+    StoreStatus.Text = storeStrictMatch
+        and "Match Search is ON: results use strict matching."
+        or "Match Search is OFF: results may be broader."
+    addLog("INFO", "ScriptBlox Match Search " .. (storeStrictMatch and "enabled" or "disabled"))
+end, 34)
+MatchSearchButton.Name = "ScriptBloxMatchSearch"
+
+StoreStatus = UI.Label(ScriptBloxPage, "Enter a search term or tap TRENDING.", 30, 10, C.Muted)
 StoreStatus.Name = "ScriptBloxStatus"
 StoreStatus.TextWrapped = true
 
@@ -1179,7 +1192,7 @@ UI.Button(ScriptBloxPage, "SEARCH SCRIPTS", function()
     end
     storeQuery = query
     storePage = 1
-    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(query) .. "&max=10&page=1&strict=false"
+    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(query) .. "&max=10&page=1&strict=" .. tostring(storeStrictMatch)
     fetchScriptBlox(endpoint, false, "Searching ScriptBlox for: " .. query)
 end)
 
@@ -1199,7 +1212,7 @@ UI.Button(ScriptBloxPage, "LOAD MORE SEARCH RESULTS", function()
         return
     end
     storePage = storePage + 1
-    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(storeQuery) .. "&max=10&page=" .. tostring(storePage) .. "&strict=false"
+    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(storeQuery) .. "&max=10&page=" .. tostring(storePage) .. "&strict=" .. tostring(storeStrictMatch)
     fetchScriptBlox(endpoint, true, "Loading page " .. tostring(storePage) .. "...")
 end)
 
@@ -1772,96 +1785,26 @@ local homeTitle = UI.Label(
 )
 
 homeTitle.Font = Enum.Font.GothamBlack
-homeTitle.LayoutOrder = 0
 
--- PLAYER PROFILE CARD (Roblox avatar thumbnail)
-local profileCard = create("Frame", {
-    Name = "PlayerProfileCard",
-    Size = UDim2.new(1, -4, 0, 82),
-    BackgroundColor3 = C.Panel,
-    BorderSizePixel = 0,
-    LayoutOrder = 1,
-}, HomePage)
-UI.Round(profileCard, 9)
-UI.Stroke(profileCard, C.Blue, 0.45)
-
-local profileAvatar = create("ImageLabel", {
-    Name = "PlayerAvatar",
-    Position = UDim2.fromOffset(10, 9),
-    Size = UDim2.fromOffset(64, 64),
-    BackgroundColor3 = C.PanelAlt,
-    BorderSizePixel = 0,
-    Image = "",
-    ScaleType = Enum.ScaleType.Crop,
-}, profileCard)
-UI.Round(profileAvatar, 32)
-
-local profileName = create("TextLabel", {
-    Name = "PlayerDisplayName",
-    Position = UDim2.new(0, 84, 0, 17),
-    Size = UDim2.new(1, -94, 0, 24),
-    BackgroundTransparency = 1,
-    Text = Player.DisplayName,
-    TextColor3 = C.Text,
-    TextSize = 16,
-    Font = Enum.Font.GothamBold,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    TextTruncate = Enum.TextTruncate.AtEnd,
-}, profileCard)
-
-local profileUsername = create("TextLabel", {
-    Name = "PlayerUsername",
-    Position = UDim2.new(0, 84, 0, 43),
-    Size = UDim2.new(1, -94, 0, 19),
-    BackgroundTransparency = 1,
-    Text = "@" .. Player.Name .. "  •  ID: " .. tostring(Player.UserId),
-    TextColor3 = C.Muted,
-    TextSize = 10,
-    Font = Enum.Font.Gotham,
-    TextXAlignment = Enum.TextXAlignment.Left,
-    TextTruncate = Enum.TextTruncate.AtEnd,
-}, profileCard)
-
--- Load the avatar asynchronously so the Home page never waits on the thumbnail API.
-task.spawn(function()
-    local ok, thumbnail = pcall(function()
-        local image, _isReady = Players:GetUserThumbnailAsync(
-            Player.UserId,
-            Enum.ThumbnailType.HeadShot,
-            Enum.ThumbnailSize.Size150x150
-        )
-        return image
-    end)
-    if ok and profileAvatar and profileAvatar.Parent then
-        profileAvatar.Image = thumbnail
-    end
-end)
-
-local homeDescription = info(
+info(
     HomePage,
     "Dark modular interface with a 321-fragment intro, planets, audio and built-in components.",
     54
 )
-homeDescription.LayoutOrder = 2
 
-local homePlayerInfo = info(HomePage, "Player: " .. Player.Name, 24, C.Text)
-homePlayerInfo.LayoutOrder = 3
-local homePlaceInfo = info(HomePage, "Place ID: " .. tostring(game.PlaceId), 24)
-homePlaceInfo.LayoutOrder = 4
-local homeVersionInfo = info(HomePage, "BuiltinModules: " .. BuiltinModules.Version, 24, C.Blue)
-homeVersionInfo.LayoutOrder = 5
+info(HomePage, "Player: " .. Player.Name, 24, C.Text)
+info(HomePage, "Place ID: " .. tostring(game.PlaceId), 24)
+info(HomePage, "BuiltinModules: " .. BuiltinModules.Version, 24, C.Blue)
 
-local homeBuiltinsButton = UI.Button(HomePage, "OPEN BUILTINMODULES", function()
+UI.Button(HomePage, "OPEN BUILTINMODULES", function()
     showPage("BuiltinModules")
 end)
-homeBuiltinsButton.LayoutOrder = 6
 
-local homeMinimizeButton = UI.Button(HomePage, "MINIMIZE TO EP ICON", function()
+UI.Button(HomePage, "MINIMIZE TO EP ICON", function()
     Hub.Visible = false
     Mini.Visible = true
     setStatus("Minimized")
 end)
-homeMinimizeButton.LayoutOrder = 7
 
 ----------------------------------------------------------------
 -- PLAYER
@@ -2218,14 +2161,24 @@ info(
 local installedModels = ENV.__EPIC_PLANETS_MODELS
 
 local function createOrbitalCore()
+    -- The Orbital Core is a visual head accessory, attached by following
+    -- the character's head locally. It does not grant server permissions.
     local character = Player.Character
-    local root = character
-        and character:FindFirstChild("HumanoidRootPart")
+    local head = character and character:FindFirstChild("Head")
 
-    if not root then
-        setStatus("Character root not ready")
+    if not head then
+        setStatus("Character head not ready")
         return
     end
+
+    -- Avoid duplicate copies if the install button is pressed repeatedly.
+    for _, oldEntry in ipairs(installedModels) do
+        if type(oldEntry) == "table" and oldEntry.model
+            and oldEntry.model.Name == "EP_OrbitalCore" then
+            pcall(function() oldEntry.model:Destroy() end)
+        end
+    end
+    table.clear(installedModels)
 
     local model = Instance.new("Model")
     model.Name = "EP_OrbitalCore"
@@ -2234,7 +2187,7 @@ local function createOrbitalCore()
     local center = Instance.new("Part")
     center.Name = "Core"
     center.Shape = Enum.PartType.Ball
-    center.Size = Vector3.new(1.7, 1.7, 1.7)
+    center.Size = Vector3.new(1.1, 1.1, 1.1)
     center.Anchored = true
     center.CanCollide = false
     center.Material = Enum.Material.Neon
@@ -2247,7 +2200,7 @@ local function createOrbitalCore()
         local planet = Instance.new("Part")
         planet.Name = "Planet" .. i
         planet.Shape = Enum.PartType.Ball
-        planet.Size = Vector3.new(0.55, 0.55, 0.55)
+        planet.Size = Vector3.new(0.34, 0.34, 0.34)
         planet.Anchored = true
         planet.CanCollide = false
         planet.Material = Enum.Material.Neon
@@ -2285,8 +2238,33 @@ local function removeModels()
     setStatus("Removed installed models")
 end
 
-UI.Button(ModelsPage, "INSTALL ORBITAL CORE", createOrbitalCore)
-UI.Button(ModelsPage, "REMOVE INSTALLED MODELS", removeModels)
+UI.Button(ModelsPage, "ADD ORBITAL CORE TO HEAD", createOrbitalCore)
+
+UI.Button(ModelsPage, "REMOVE ORBITAL CORE", function()
+    for i = #installedModels, 1, -1 do
+        local entry = installedModels[i]
+        if type(entry) == "table" and entry.model
+            and entry.model.Name == "EP_OrbitalCore" then
+            pcall(function() entry.model:Destroy() end)
+            table.remove(installedModels, i)
+        end
+    end
+    setStatus("Orbital Core removed")
+end)
+
+UI.Button(ModelsPage, "REMOVE ALL INSTALLED MODELS", removeModels)
+
+-- Automatically equip the Orbital Core when Main.lua executes.
+task.spawn(function()
+    for _ = 1, 20 do
+        if Player.Character and Player.Character:FindFirstChild("Head") then
+            createOrbitalCore()
+            return
+        end
+        task.wait(0.25)
+    end
+    setStatus("Orbital Core skipped: character head unavailable")
+end)
 
 ----------------------------------------------------------------
 -- SETTINGS
@@ -2651,11 +2629,10 @@ connect(RunService.RenderStepped, function()
             table.remove(installedModels, i)
         else
             local character = Player.Character
-            local root = character
-                and character:FindFirstChild("HumanoidRootPart")
+            local head = character and character:FindFirstChild("Head")
 
-            if root and entry.center and entry.center.Parent then
-                local base = root.CFrame * CFrame.new(0, 4.5, -6)
+            if head and entry.center and entry.center.Parent then
+                local base = head.CFrame * CFrame.new(0, 1.15, 0)
 
                 entry.center.CFrame = base
 
@@ -2664,9 +2641,9 @@ connect(RunService.RenderStepped, function()
                         now * 1.1 + (index - 1) * math.pi / 2
 
                     local offset = Vector3.new(
-                        math.cos(angle) * 2.7,
-                        math.sin(angle * 1.4) * 0.6,
-                        math.sin(angle) * 2.7
+                        math.cos(angle) * 1.0,
+                        math.sin(angle * 1.4) * 0.18,
+                        math.sin(angle) * 1.0
                     )
 
                     planet.CFrame = CFrame.new(base.Position + offset)
