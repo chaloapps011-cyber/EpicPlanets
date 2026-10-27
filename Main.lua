@@ -678,6 +678,8 @@ UI.Round(Hub, 11)
 UI.Stroke(Hub, C.Blue, 0.05)
 
 local Header = create("TextLabel", {
+    Name = "DragHeader",
+    Active = true,
     Position = UDim2.new(0, 12, 0, 7),
     Size = UDim2.new(1, -92, 0, 28),
     BackgroundTransparency = 1,
@@ -932,87 +934,6 @@ local selectedTouch = "None"
 local personalAudioCache = ENV.__EPIC_PLANETS_PERSONAL_AUDIO_SOUNDS
 local introFlashHappened = false
 
-----------------------------------------------------------------
--- SETTINGS DRAFT: AUTO-SAVE / AUTO-RESTORE
-----------------------------------------------------------------
-
-local HttpService = game:GetService("HttpService")
-local DraftFolder = "EpicPlanets"
-local DraftFile = DraftFolder .. "/settings_draft.json"
-
-local function saveSettingsDraft()
-    local folderOK, folderExists = BuiltinModules.Executor.Call("isfolder", DraftFolder)
-    if not folderOK or folderExists ~= true then
-        BuiltinModules.Executor.Call("makefolder", DraftFolder)
-    end
-
-    local draft = {
-        Version = 1,
-        SelectedMusic = selectedMusic,
-        SelectedTouch = selectedTouch,
-        AudioVolume = BuiltinModules.Settings.AudioVolume,
-        FlashAudio = BuiltinModules.Settings.FlashAudio,
-        Intro = BuiltinModules.Settings.Intro,
-        Rainbow = BuiltinModules.Settings.Rainbow,
-    }
-
-    local encodeOK, encoded = pcall(function()
-        return HttpService:JSONEncode(draft)
-    end)
-    if not encodeOK then
-        return false, "Could not encode settings"
-    end
-
-    local writeOK, writeResult = BuiltinModules.Executor.Call("writefile", DraftFile, encoded)
-    if not writeOK then
-        return false, "Executor does not support writefile"
-    end
-    return true
-end
-
-local function loadSettingsDraft()
-    local fileOK, exists = BuiltinModules.Executor.Call("isfile", DraftFile)
-    if not fileOK or exists ~= true then
-        return false, "No saved draft yet"
-    end
-
-    local readOK, contents = BuiltinModules.Executor.Call("readfile", DraftFile)
-    if not readOK or type(contents) ~= "string" then
-        return false, "Could not read settings draft"
-    end
-
-    local decodeOK, draft = pcall(function()
-        return HttpService:JSONDecode(contents)
-    end)
-    if not decodeOK or type(draft) ~= "table" then
-        return false, "Saved draft is invalid"
-    end
-
-    if type(draft.SelectedMusic) == "string"
-        and (draft.SelectedMusic == "None" or MusicTracks[draft.SelectedMusic]) then
-        selectedMusic = draft.SelectedMusic
-    end
-    if type(draft.SelectedTouch) == "string"
-        and (draft.SelectedTouch == "None" or TouchTracks[draft.SelectedTouch]) then
-        selectedTouch = draft.SelectedTouch
-    end
-    if type(draft.AudioVolume) == "number" then
-        BuiltinModules.Settings.AudioVolume = math.clamp(draft.AudioVolume, 0, 1)
-    end
-    if type(draft.FlashAudio) == "boolean" then
-        BuiltinModules.Settings.FlashAudio = draft.FlashAudio
-    end
-    if type(draft.Intro) == "boolean" then
-        BuiltinModules.Settings.Intro = draft.Intro
-    end
-    if type(draft.Rainbow) == "boolean" then
-        BuiltinModules.Settings.Rainbow = draft.Rainbow
-    end
-    return true
-end
-
-local draftLoaded, draftLoadMessage = loadSettingsDraft()
-
 local function stopPersonalMusic()
     for key, sound in pairs(personalAudioCache) do
         if string.sub(tostring(key), 1, 6) == "Music:" then
@@ -1173,13 +1094,11 @@ local function refreshTouchChoice()
     end
 end
 
-musicChoiceButton = UI.Button(PersonalizationPage, "MUSIC: " .. selectedMusic .. "  [TAP TO CHANGE]", function()
+musicChoiceButton = UI.Button(PersonalizationPage, "MUSIC: Screenrecorder  [TAP TO CHANGE]", function()
     local index = table.find(MusicOrder, selectedMusic) or 1
     index = (index % #MusicOrder) + 1
     selectedMusic = MusicOrder[index]
     refreshMusicChoice()
-    local saved, saveError = saveSettingsDraft()
-    if not saved then warn("[EPIC PLANETS DRAFT] " .. tostring(saveError)) end
 
     if selectedMusic == "None" then
         stopPersonalMusic()
@@ -1218,13 +1137,11 @@ end, 38)
 UI.Label(PersonalizationPage, "TOUCH SOUND", 22, 12, C.Text).Font =
     Enum.Font.GothamBold
 
-touchChoiceButton = UI.Button(PersonalizationPage, "TOUCH SOUND: " .. selectedTouch .. "  [TAP TO CHANGE]", function()
+touchChoiceButton = UI.Button(PersonalizationPage, "TOUCH SOUND: None  [TAP TO CHANGE]", function()
     local index = table.find(TouchOrder, selectedTouch) or 1
     index = (index % #TouchOrder) + 1
     selectedTouch = TouchOrder[index]
     refreshTouchChoice()
-    local saved, saveError = saveSettingsDraft()
-    if not saved then warn("[EPIC PLANETS DRAFT] " .. tostring(saveError)) end
 
     if selectedTouch == "None" then
         setStatus("Touch sound disabled (None)")
@@ -1248,36 +1165,6 @@ UI.Button(PersonalizationPage, "PLAY TOUCH SOUND PREVIEW", function()
     end
     task.spawn(playPersonalTouch)
 end, 38)
-
-UI.Label(PersonalizationPage, "SAVED DRAFT", 22, 12, C.Text).Font = Enum.Font.GothamBold
-info(PersonalizationPage, "Your music and touch-sound choices are saved automatically and restored next time, when executor file APIs are available.", 48, C.Blue)
-
-UI.Button(PersonalizationPage, "SAVE SETTINGS DRAFT NOW", function()
-    local saved, err = saveSettingsDraft()
-    setStatus(saved and "Settings draft saved" or ("Draft save failed: " .. tostring(err)))
-end, 38)
-
-UI.Button(PersonalizationPage, "LOAD SAVED DRAFT", function()
-    local loaded, err = loadSettingsDraft()
-    if loaded then
-        refreshMusicChoice()
-        refreshTouchChoice()
-        if introFlashHappened then
-            playPersonalMusic(selectedMusic, true)
-        elseif selectedMusic == "None" then
-            stopPersonalMusic()
-        end
-        setStatus("Saved draft restored")
-    else
-        setStatus("Draft load failed: " .. tostring(err))
-    end
-end, 38)
-
-if draftLoaded then
-    setStatus("Saved draft restored")
-else
-    setStatus("Using defaults: " .. tostring(draftLoadMessage))
-end
 
 info(PersonalizationPage, "Defaults: Screenrecorder music, None touch sound.", 32, C.Blue)
 info(PersonalizationPage, "If an MP3 fails to load, check the GitHub file URL and executor file/asset support.", 45)
@@ -1875,14 +1762,16 @@ end)
 local dragging = false
 local dragStart
 local startPosition
+local activeTouch
 
+-- Header is an active drag handle, including on mobile touchscreens.
 connect(Header.InputBegan, function(input)
     if input.UserInputType == Enum.UserInputType.Touch
         or input.UserInputType == Enum.UserInputType.MouseButton1 then
-
         dragging = true
         dragStart = input.Position
         startPosition = Hub.Position
+        activeTouch = input.UserInputType == Enum.UserInputType.Touch and input or nil
     end
 end)
 
@@ -1891,25 +1780,40 @@ connect(UserInputService.InputChanged, function(input)
         return
     end
 
-    if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseMovement then
+    local isMouseMove = input.UserInputType == Enum.UserInputType.MouseMovement
+    local isActiveTouchMove = activeTouch ~= nil
+        and input.UserInputType == Enum.UserInputType.Touch
+        and input == activeTouch
 
+    if isMouseMove or isActiveTouchMove then
         local delta = input.Position - dragStart
+        local camera = Workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize
+        local newX = startPosition.X.Offset + delta.X
+        local newY = startPosition.Y.Offset + delta.Y
+
+        -- Keep the panel reachable on screen when dragging.
+        if viewport then
+            local halfW = Hub.AbsoluteSize.X / 2
+            local halfH = Hub.AbsoluteSize.Y / 2
+            newX = math.clamp(newX, -viewport.X / 2 + 40, viewport.X / 2 - 40)
+            newY = math.clamp(newY, -viewport.Y / 2 + 24, viewport.Y / 2 - 24)
+        end
 
         Hub.Position = UDim2.new(
-            startPosition.X.Scale,
-            startPosition.X.Offset + delta.X,
-            startPosition.Y.Scale,
-            startPosition.Y.Offset + delta.Y
+            startPosition.X.Scale, newX,
+            startPosition.Y.Scale, newY
         )
     end
 end)
 
 connect(UserInputService.InputEnded, function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1 then
-
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or (activeTouch ~= nil and input == activeTouch) then
         dragging = false
+        dragStart = nil
+        startPosition = nil
+        activeTouch = nil
     end
 end)
 
