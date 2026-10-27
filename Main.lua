@@ -195,11 +195,48 @@ local function tween(object, duration, properties, style)
     return animation
 end
 
-local function setStatus(message)
-    local status = ENV.__EPIC_PLANETS_STATUS
+-- Runtime log buffer. It is bounded so the UI cannot grow forever.
+local RuntimeLogs = {}
+local refreshLogsPage
+local MAX_RUNTIME_LOGS = 100
 
+local function addLog(level, message)
+    local stamp = "--:--:--"
+    pcall(function()
+        stamp = os.date("%H:%M:%S")
+    end)
+
+    local entry = {
+        time = stamp,
+        level = tostring(level or "INFO"),
+        message = tostring(message or ""),
+    }
+
+    if #entry.message > 220 then
+        entry.message = string.sub(entry.message, 1, 217) .. "..."
+    end
+
+    table.insert(RuntimeLogs, entry)
+    while #RuntimeLogs > MAX_RUNTIME_LOGS do
+        table.remove(RuntimeLogs, 1)
+    end
+
+    if refreshLogsPage then
+        task.defer(function()
+            if refreshLogsPage then
+                pcall(refreshLogsPage)
+            end
+        end)
+    end
+end
+
+local function setStatus(message)
+    local value = tostring(message)
+    addLog("INFO", value)
+
+    local status = ENV.__EPIC_PLANETS_STATUS
     if status and status.Parent then
-        status.Text = "Status: " .. tostring(message)
+        status.Text = "Status: " .. value
     end
 end
 
@@ -359,7 +396,9 @@ function BuiltinModules.UI.Button(parent, text, callback, height)
         local ok, err = pcall(callback, button)
 
         if not ok then
-            warn("[EPIC PLANETS] Button error: " .. tostring(err))
+            local message = "Button error: " .. tostring(err)
+            addLog("ERROR", message)
+            warn("[EPIC PLANETS] " .. message)
         end
     end)
 
@@ -677,9 +716,10 @@ hubConstraint.Parent = Hub
 UI.Round(Hub, 11)
 UI.Stroke(Hub, C.Blue, 0.05)
 
-local Header = create("TextLabel", {
+local Header = create("TextButton", {
     Name = "DragHeader",
     Active = true,
+    AutoButtonColor = false,
     Position = UDim2.new(0, 12, 0, 7),
     Size = UDim2.new(1, -92, 0, 28),
     BackgroundTransparency = 1,
@@ -705,12 +745,17 @@ local Minimize = create("TextButton", {
 UI.Round(Minimize, 6)
 UI.Stroke(Minimize, C.Blue, 0.3)
 
-local Sidebar = create("Frame", {
+local Sidebar = create("ScrollingFrame", {
     Name = "Sidebar",
     Position = UDim2.new(0, 10, 0, 48),
     Size = UDim2.new(0, 102, 1, -81),
     BackgroundColor3 = C.Background,
     BorderSizePixel = 0,
+    ScrollBarThickness = 2,
+    ScrollBarImageColor3 = C.Blue,
+    ScrollingDirection = Enum.ScrollingDirection.Y,
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    CanvasSize = UDim2.new(0, 0, 0, 0),
 }, Hub)
 
 UI.Round(Sidebar, 7)
@@ -867,6 +912,8 @@ local MovesetsPage = makePage("Movesets")
 local ModelsPage = makePage("Models")
 local SettingsPage = makePage("Settings")
 local PersonalizationPage = makePage("Personalization")
+local ScriptBloxPage = makePage("ScriptBlox")
+local LogsPage = makePage("Logs")
 
 addTab("Home", "HOME", 1)
 addTab("Player", "PLAYER", 2)
@@ -875,6 +922,344 @@ addTab("Movesets", "MOVESETS", 4)
 addTab("Models", "MODEL STORE", 5)
 addTab("Settings", "SETTINGS", 6)
 addTab("Personalization", "PERSONAL", 7)
+addTab("ScriptBlox", "SCRIPTBLOX", 8)
+addTab("Logs", "LOGS", 9)
+
+----------------------------------------------------------------
+-- SCRIPTBLOX STORE
+----------------------------------------------------------------
+
+local HttpService = game:GetService("HttpService")
+local ScriptBloxBase = "https://scriptblox.com"
+local ScriptResultCards = {}
+local storeQuery = ""
+local storePage = 1
+local storeRequestId = 0
+local storeBusy = false
+
+UI.Label(ScriptBloxPage, "SCRIPTBLOX STORE", 29, 14, C.Text).Font = Enum.Font.GothamBlack
+info(ScriptBloxPage, "Search community scripts. Review source before using it; this store copies source but never auto-executes it.", 55, C.Muted)
+info(ScriptBloxPage, "Powered by ScriptBlox.com", 22, C.Blue)
+
+local StoreSearchBox = create("TextBox", {
+    Name = "ScriptBloxSearchBox",
+    Size = UDim2.new(1, -4, 0, 38),
+    BackgroundColor3 = C.PanelAlt,
+    BorderSizePixel = 0,
+    ClearTextOnFocus = false,
+    PlaceholderText = "Search scripts...",
+    PlaceholderColor3 = C.Muted,
+    Text = "",
+    TextColor3 = C.Text,
+    TextSize = 12,
+    Font = Enum.Font.Gotham,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, ScriptBloxPage)
+UI.Round(StoreSearchBox, 7)
+UI.Stroke(StoreSearchBox, C.Blue, 0.45)
+local storeSearchPadding = Instance.new("UIPadding")
+storeSearchPadding.PaddingLeft = UDim.new(0, 10)
+storeSearchPadding.PaddingRight = UDim.new(0, 8)
+storeSearchPadding.Parent = StoreSearchBox
+
+local StoreStatus = UI.Label(ScriptBloxPage, "Enter a search term or tap TRENDING.", 30, 10, C.Muted)
+StoreStatus.Name = "ScriptBloxStatus"
+StoreStatus.TextWrapped = true
+
+local function urlEncode(value)
+    return (string.gsub(tostring(value or ""), "([^%w%-_%.~])", function(char)
+        return string.format("%%%02X", string.byte(char))
+    end))
+end
+
+local function clearStoreCards()
+    for _, card in ipairs(ScriptResultCards) do
+        pcall(function()
+            card:Destroy()
+        end)
+    end
+    table.clear(ScriptResultCards)
+end
+
+local function copyToClipboard(value)
+    local clipboardNames = {"setclipboard", "toclipboard", "setrbxclipboard"}
+    for _, name in ipairs(clipboardNames) do
+        local ok = BuiltinModules.Executor.Call(name, value)
+        if ok then
+            return true
+        end
+    end
+    return false, "Clipboard API unavailable in this executor"
+end
+
+local function makeScriptCard(scriptData)
+    local title = tostring(scriptData.title or "Untitled script")
+    local gameName = "Unknown game"
+    if type(scriptData.game) == "table" and scriptData.game.name then
+        gameName = tostring(scriptData.game.name)
+    end
+
+    local flags = {}
+    if scriptData.verified == true then table.insert(flags, "Verified") end
+    if scriptData.key == true then table.insert(flags, "Key system") end
+    if scriptData.isUniversal == true then table.insert(flags, "Universal") end
+    if scriptData.isPatched == true then table.insert(flags, "Marked patched") end
+    if #flags == 0 then table.insert(flags, "No special flags reported") end
+
+    local card = create("Frame", {
+        Name = "ScriptResultCard",
+        Size = UDim2.new(1, -4, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundColor3 = C.Panel,
+        BorderSizePixel = 0,
+    }, ScriptBloxPage)
+    table.insert(ScriptResultCards, card)
+    UI.Round(card, 7)
+    UI.Stroke(card, C.Blue, 0.55)
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 7)
+    padding.PaddingBottom = UDim.new(0, 7)
+    padding.PaddingLeft = UDim.new(0, 7)
+    padding.PaddingRight = UDim.new(0, 7)
+    padding.Parent = card
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 5)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = card
+
+    local titleLabel = UI.Label(card, title, 34, 11, C.Text)
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.LayoutOrder = 1
+
+    local views = tonumber(scriptData.views) or 0
+    local meta = "Game: " .. gameName .. "\nViews: " .. tostring(views) .. " | " .. table.concat(flags, ", ")
+    local metaLabel = UI.Label(card, meta, 42, 9, C.Muted)
+    metaLabel.LayoutOrder = 2
+
+    local scriptIdentifier = tostring(scriptData.slug or scriptData._id or "")
+    local pageURL = ScriptBloxBase .. "/script/" .. urlEncode(scriptIdentifier)
+    local rawURL = ScriptBloxBase .. "/api/script/raw/" .. urlEncode(scriptIdentifier)
+
+    local copySourceButton = UI.Button(card, "COPY SCRIPT SOURCE", function()
+        if scriptIdentifier == "" then
+            StoreStatus.Text = "This result has no script identifier."
+            addLog("WARN", "ScriptBlox result missing script identifier")
+            return
+        end
+
+        StoreStatus.Text = "Fetching source..."
+        addLog("INFO", "Fetching source for " .. title)
+        task.spawn(function()
+            local ok, source = pcall(function()
+                return game:HttpGet(rawURL)
+            end)
+            if not ok or type(source) ~= "string" or #source == 0 then
+                StoreStatus.Text = "Could not fetch source. Check connection/executor support."
+                addLog("ERROR", "ScriptBlox source request failed: " .. tostring(source))
+                return
+            end
+
+            local copied, copyError = copyToClipboard(source)
+            if copied then
+                StoreStatus.Text = "Source copied. Review it before running."
+                addLog("INFO", "Copied source: " .. title)
+            else
+                StoreStatus.Text = tostring(copyError) .. ". Open the ScriptBlox page instead."
+                addLog("WARN", tostring(copyError))
+            end
+        end)
+    end, 31)
+    copySourceButton.LayoutOrder = 3
+
+    local copyLinkButton = UI.Button(card, "COPY SCRIPTBLOX LINK", function()
+        local copied, copyError = copyToClipboard(pageURL)
+        if copied then
+            StoreStatus.Text = "ScriptBlox link copied."
+            addLog("INFO", "Copied ScriptBlox link: " .. title)
+        else
+            StoreStatus.Text = tostring(copyError)
+            addLog("WARN", tostring(copyError))
+        end
+    end, 31)
+    copyLinkButton.LayoutOrder = 4
+end
+
+local function fetchScriptBlox(endpoint, appendResults, description)
+    if storeBusy then
+        StoreStatus.Text = "A request is already running. Please wait for it to finish."
+        return
+    end
+
+    storeRequestId = storeRequestId + 1
+    local requestId = storeRequestId
+    storeBusy = true
+    StoreStatus.Text = description or "Loading ScriptBlox results..."
+
+    if not appendResults then
+        clearStoreCards()
+    end
+
+    addLog("INFO", "ScriptBlox request: " .. tostring(description or "load"))
+    task.spawn(function()
+        local requestOK, body = pcall(function()
+            return game:HttpGet(endpoint)
+        end)
+        if requestId ~= storeRequestId then return end
+
+        if not requestOK or type(body) ~= "string" or #body == 0 then
+            storeBusy = false
+            StoreStatus.Text = "Request failed. Check internet and executor HTTP support."
+            addLog("ERROR", "ScriptBlox HTTP request failed: " .. tostring(body))
+            return
+        end
+
+        local decodeOK, payload = pcall(function()
+            return HttpService:JSONDecode(body)
+        end)
+        if requestId ~= storeRequestId then return end
+
+        if not decodeOK or type(payload) ~= "table" then
+            storeBusy = false
+            StoreStatus.Text = "ScriptBlox returned invalid JSON."
+            addLog("ERROR", "Could not decode ScriptBlox response: " .. tostring(payload))
+            return
+        end
+
+        if payload.message then
+            storeBusy = false
+            StoreStatus.Text = "ScriptBlox: " .. tostring(payload.message)
+            addLog("WARN", "ScriptBlox API: " .. tostring(payload.message))
+            return
+        end
+
+        local result = payload.result
+        local scripts = type(result) == "table" and result.scripts or nil
+        if type(scripts) ~= "table" then
+            storeBusy = false
+            StoreStatus.Text = "No script results were returned by the API."
+            addLog("WARN", "ScriptBlox response did not contain result.scripts")
+            return
+        end
+
+        local count = 0
+        for _, scriptData in ipairs(scripts) do
+            if type(scriptData) == "table" then
+                local safeData = scriptData
+                local okCard, cardError = pcall(function()
+                    makeScriptCard(safeData)
+                end)
+                if okCard then
+                    count = count + 1
+                else
+                    addLog("ERROR", "Could not create ScriptBlox result card: " .. tostring(cardError))
+                end
+            end
+        end
+
+        storeBusy = false
+        StoreStatus.Text = tostring(count) .. " result(s) loaded. Source is copied, not executed."
+        addLog("INFO", "ScriptBlox loaded " .. tostring(count) .. " result(s)")
+        if count == 0 then
+            StoreStatus.Text = "No results in this batch. Try another search term."
+        end
+    end)
+end
+
+UI.Button(ScriptBloxPage, "SEARCH SCRIPTS", function()
+    local query = string.gsub(StoreSearchBox.Text or "", "^%s*(.-)%s*$", "%1")
+    if query == "" then
+        StoreStatus.Text = "Type a search term first."
+        return
+    end
+    storeQuery = query
+    storePage = 1
+    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(query) .. "&max=10&page=1&strict=false"
+    fetchScriptBlox(endpoint, false, "Searching ScriptBlox for: " .. query)
+end)
+
+UI.Button(ScriptBloxPage, "TRENDING SCRIPTS", function()
+    storeQuery = ""
+    storePage = 1
+    fetchScriptBlox(ScriptBloxBase .. "/api/script/trending?max=10", false, "Loading trending scripts...")
+end)
+
+UI.Button(ScriptBloxPage, "LOAD MORE SEARCH RESULTS", function()
+    if storeBusy then
+        StoreStatus.Text = "A request is already running. Please wait for it to finish."
+        return
+    end
+    if storeQuery == "" then
+        StoreStatus.Text = "Run a search first. Trending results do not use search pagination here."
+        return
+    end
+    storePage = storePage + 1
+    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(storeQuery) .. "&max=10&page=" .. tostring(storePage) .. "&strict=false"
+    fetchScriptBlox(endpoint, true, "Loading page " .. tostring(storePage) .. "...")
+end)
+
+----------------------------------------------------------------
+-- LOGS PAGE
+----------------------------------------------------------------
+
+UI.Label(LogsPage, "RUNTIME LOGS", 29, 14, C.Text).Font = Enum.Font.GothamBlack
+info(LogsPage, "Shows status changes, ScriptBlox requests and errors captured by EPIC PLANETS.", 43, C.Muted)
+
+local LogsOutput
+
+refreshLogsPage = function()
+    if not LogsOutput or not LogsOutput.Parent then return end
+    if #RuntimeLogs == 0 then
+        LogsOutput.Text = "No log entries yet."
+        return
+    end
+
+    local lines = {}
+    local first = math.max(1, #RuntimeLogs - 59)
+    for i = first, #RuntimeLogs do
+        local entry = RuntimeLogs[i]
+        table.insert(lines, "[" .. entry.time .. "] " .. entry.level .. " | " .. entry.message)
+    end
+    LogsOutput.Text = table.concat(lines, "\n")
+end
+
+UI.Button(LogsPage, "REFRESH LOGS", function()
+    refreshLogsPage()
+    setStatus("Logs refreshed")
+end)
+
+UI.Button(LogsPage, "CLEAR LOGS", function()
+    table.clear(RuntimeLogs)
+    refreshLogsPage()
+    addLog("INFO", "Log history cleared")
+    setStatus("Logs cleared")
+end)
+
+UI.Button(LogsPage, "COPY LOGS", function()
+    local lines = {}
+    for _, entry in ipairs(RuntimeLogs) do
+        table.insert(lines, "[" .. entry.time .. "] " .. entry.level .. " | " .. entry.message)
+    end
+    local copied, copyError = copyToClipboard(table.concat(lines, "\n"))
+    if copied then
+        setStatus("Logs copied to clipboard")
+    else
+        setStatus(tostring(copyError))
+        addLog("WARN", tostring(copyError))
+    end
+end)
+
+
+LogsOutput = UI.Label(LogsPage, "No log entries yet.", 40, 10, C.Text)
+LogsOutput.Name = "RuntimeLogOutput"
+LogsOutput.Size = UDim2.new(1, -4, 0, 0)
+LogsOutput.AutomaticSize = Enum.AutomaticSize.Y
+LogsOutput.TextWrapped = true
+LogsOutput.TextXAlignment = Enum.TextXAlignment.Left
+LogsOutput.TextYAlignment = Enum.TextYAlignment.Top
+LogsOutput.Font = Enum.Font.Code
+refreshLogsPage()
 
 ----------------------------------------------------------------
 -- PERSONALIZATION: MUSIC AND TOUCH SOUNDS
@@ -1756,64 +2141,106 @@ connect(TapIn.Activated, function()
 end)
 
 ----------------------------------------------------------------
--- DRAG WINDOW
+-- DRAG WINDOW: MOUSE + TOUCH, WITH VIEWPORT CLAMPING
 ----------------------------------------------------------------
 
 local dragging = false
 local dragStart
 local startPosition
 local activeTouch
+local dragInput
 
--- Header is an active drag handle, including on mobile touchscreens.
-connect(Header.InputBegan, function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPosition = Hub.Position
-        activeTouch = input.UserInputType == Enum.UserInputType.Touch and input or nil
-    end
-end)
+local function stopDragging()
+    dragging = false
+    dragStart = nil
+    startPosition = nil
+    activeTouch = nil
+    dragInput = nil
+end
 
-connect(UserInputService.InputChanged, function(input)
+local function applyDrag(input)
     if not dragging or not dragStart or not startPosition then
         return
     end
 
-    local isMouseMove = input.UserInputType == Enum.UserInputType.MouseMovement
-    local isActiveTouchMove = activeTouch ~= nil
-        and input.UserInputType == Enum.UserInputType.Touch
-        and input == activeTouch
+    local camera = Workspace.CurrentCamera
+    local viewport = camera and camera.ViewportSize
+    if not viewport then
+        return
+    end
 
-    if isMouseMove or isActiveTouchMove then
-        local delta = input.Position - dragStart
-        local camera = Workspace.CurrentCamera
-        local viewport = camera and camera.ViewportSize
-        local newX = startPosition.X.Offset + delta.X
-        local newY = startPosition.Y.Offset + delta.Y
+    local delta = input.Position - dragStart
+    local startCenterX = viewport.X * startPosition.X.Scale + startPosition.X.Offset
+    local startCenterY = viewport.Y * startPosition.Y.Scale + startPosition.Y.Offset
+    local centerX = startCenterX + delta.X
+    local centerY = startCenterY + delta.Y
 
-        -- Keep the panel reachable on screen when dragging.
-        if viewport then
-            local halfW = Hub.AbsoluteSize.X / 2
-            local halfH = Hub.AbsoluteSize.Y / 2
-            newX = math.clamp(newX, -viewport.X / 2 + 40, viewport.X / 2 - 40)
-            newY = math.clamp(newY, -viewport.Y / 2 + 24, viewport.Y / 2 - 24)
-        end
+    local halfW = Hub.AbsoluteSize.X / 2
+    local halfH = Hub.AbsoluteSize.Y / 2
+    local marginX = 40
+    local marginY = 28
 
-        Hub.Position = UDim2.new(
-            startPosition.X.Scale, newX,
-            startPosition.Y.Scale, newY
-        )
+    -- Keep the whole window visible when possible; otherwise keep a grab area visible.
+    local minX, maxX
+    if Hub.AbsoluteSize.X <= viewport.X then
+        minX, maxX = halfW, viewport.X - halfW
+    else
+        minX, maxX = marginX - halfW, viewport.X - marginX + halfW
+    end
+
+    local minY, maxY
+    if Hub.AbsoluteSize.Y <= viewport.Y then
+        minY, maxY = halfH, viewport.Y - halfH
+    else
+        minY, maxY = marginY - halfH, viewport.Y - marginY + halfH
+    end
+
+    centerX = math.clamp(centerX, minX, maxX)
+    centerY = math.clamp(centerY, minY, maxY)
+
+    Hub.Position = UDim2.new(
+        startPosition.X.Scale,
+        centerX - viewport.X * startPosition.X.Scale,
+        startPosition.Y.Scale,
+        centerY - viewport.Y * startPosition.Y.Scale
+    )
+end
+
+connect(Header.InputBegan, function(input)
+    local inputType = input.UserInputType
+    if inputType ~= Enum.UserInputType.Touch
+        and inputType ~= Enum.UserInputType.MouseButton1 then
+        return
+    end
+
+    dragging = true
+    dragStart = input.Position
+    startPosition = Hub.Position
+    activeTouch = inputType == Enum.UserInputType.Touch and input or nil
+end)
+
+connect(Header.InputChanged, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+connect(UserInputService.InputChanged, function(input)
+    if dragging and dragInput and input == dragInput then
+        applyDrag(input)
+    elseif dragging and input.UserInputType == Enum.UserInputType.MouseMovement
+        and activeTouch == nil then
+        -- Fallback for executors/devices where Header.InputChanged is not forwarded.
+        applyDrag(input)
     end
 end)
 
 connect(UserInputService.InputEnded, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or (activeTouch ~= nil and input == activeTouch) then
-        dragging = false
-        dragStart = nil
-        startPosition = nil
-        activeTouch = nil
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        stopDragging()
+    elseif activeTouch and input == activeTouch then
+        stopDragging()
     end
 end)
 
@@ -2047,6 +2474,8 @@ end)
 BuiltinModules.Initialized = true
 ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
 
+addLog("INFO", "EPIC PLANETS initialized; ScriptBlox store and Logs pages registered")
+refreshLogsPage()
 showPage("Home")
 setStatus("Loading intro")
 
@@ -2056,6 +2485,7 @@ print("[EPIC PLANETS] BuiltinModules " .. BuiltinModules.Version)
 if flashSound then
     print("[EPIC PLANETS AUDIO] Ready for intro flash.")
 else
+    addLog("WARN", "Audio unavailable; interface will still load.")
     warn("[EPIC PLANETS AUDIO] Audio unavailable; interface will still load.")
 end
 
@@ -2065,6 +2495,7 @@ task.spawn(function()
     end)
 
     if not ok then
+        addLog("ERROR", "Intro error: " .. tostring(err))
         warn("[EPIC PLANETS] Intro error: " .. tostring(err))
     end
 end)
