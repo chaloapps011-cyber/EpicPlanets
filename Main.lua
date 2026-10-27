@@ -1671,6 +1671,61 @@ local function showStorePreview(scriptData)
     addLog("STORE", "Previewed source: " .. tostring(scriptData.title or "Untitled"))
 end
 
+local storeImageCache = {}
+local function getStoreImage(imageUrl)
+    if type(imageUrl) ~= "string" or imageUrl == "" then
+        return ""
+    end
+    if storeImageCache[imageUrl] then
+        return storeImageCache[imageUrl]
+    end
+
+    -- Roblox ImageLabel usually needs an asset URI. Some executors allow
+    -- downloading the ScriptBlox thumbnail and exposing it with getcustomasset.
+    local getAsset = (type(ENV.getcustomasset) == "function" and ENV.getcustomasset)
+        or (type(ENV.getsynasset) == "function" and ENV.getsynasset)
+        or (type(getcustomasset) == "function" and getcustomasset)
+        or (type(getsynasset) == "function" and getsynasset)
+    local write = (type(ENV.writefile) == "function" and ENV.writefile)
+        or (type(writefile) == "function" and writefile)
+    local httpGet = (type(ENV.request) == "function" and ENV.request)
+        or (type(ENV.http_request) == "function" and ENV.http_request)
+        or (type(request) == "function" and request)
+
+    if getAsset and write then
+        local ok, assetPath = pcall(function()
+            local body
+            if httpGet then
+                local response = httpGet({Url = imageUrl, Method = "GET"})
+                body = response and (response.Body or response.body)
+            end
+            if type(body) ~= "string" or #body == 0 then
+                body = game:HttpGet(imageUrl)
+            end
+            if type(body) ~= "string" or #body == 0 then
+                error("empty image response")
+            end
+            local ext = imageUrl:lower():match("%.(png)[%?#]?") and "png" or "jpg"
+            local path = "EPIC_PLANETS/ScriptStore/thumb_" .. tostring(math.abs(#imageUrl * 7919 + string.byte(imageUrl, 1))) .. "." .. ext
+            local isfolderFn = (type(ENV.isfolder) == "function" and ENV.isfolder) or (type(isfolder) == "function" and isfolder)
+            local makefolderFn = (type(ENV.makefolder) == "function" and ENV.makefolder) or (type(makefolder) == "function" and makefolder)
+            if makefolderFn and isfolderFn then
+                if not isfolderFn("EPIC_PLANETS") then pcall(makefolderFn, "EPIC_PLANETS") end
+                if not isfolderFn("EPIC_PLANETS/ScriptStore") then pcall(makefolderFn, "EPIC_PLANETS/ScriptStore") end
+            end
+            write(path, body)
+            return getAsset(path)
+        end)
+        if ok and type(assetPath) == "string" then
+            storeImageCache[imageUrl] = assetPath
+            return assetPath
+        end
+    end
+
+    -- If the executor supports direct web image URIs, let Roblox try that.
+    return imageUrl
+end
+
 local function addStoreListing(item, index)
     local title = tostring(item.title or "Untitled script")
     local gameName = "Universal"
@@ -1681,6 +1736,10 @@ local function addStoreListing(item, index)
     end
     local verifiedText = item.verified and "VERIFIED" or "COMMUNITY"
     local patchedText = item.isPatched and "PATCHED" or "STATUS UNKNOWN"
+    local imageUrl = item.image
+    if (type(imageUrl) ~= "string" or imageUrl == "") and item.game and type(item.game) == "table" then
+        imageUrl = item.game.imageUrl
+    end
 
     local card = create("Frame", {
         Name = "ScriptListing_" .. tostring(index),
@@ -1691,9 +1750,25 @@ local function addStoreListing(item, index)
     UI.Round(card, 7)
     UI.Stroke(card, item.verified and C.Green or C.Blue, 0.45)
 
+    local thumbnail = create("ImageLabel", {
+        Name = "ScriptThumbnail",
+        Position = UDim2.new(0, 7, 0, 8),
+        Size = UDim2.new(0, 82, 0, 78),
+        BackgroundColor3 = C.Panel,
+        BorderSizePixel = 0,
+        Image = getStoreImage(imageUrl),
+        ScaleType = Enum.ScaleType.Crop,
+        ImageTransparency = 0,
+    }, card)
+    UI.Round(thumbnail, 6)
+    UI.Stroke(thumbnail, C.Blue, 0.55)
+    if type(imageUrl) ~= "string" or imageUrl == "" then
+        thumbnail.Image = ""
+    end
+
     create("TextLabel", {
-        Position = UDim2.new(0, 8, 0, 5),
-        Size = UDim2.new(1, -16, 0, 30),
+        Position = UDim2.new(0, 98, 0, 5),
+        Size = UDim2.new(1, -106, 0, 30),
         BackgroundTransparency = 1,
         Text = title,
         TextColor3 = C.Text,
@@ -1703,8 +1778,8 @@ local function addStoreListing(item, index)
         TextXAlignment = Enum.TextXAlignment.Left,
     }, card)
     create("TextLabel", {
-        Position = UDim2.new(0, 8, 0, 36),
-        Size = UDim2.new(1, -16, 0, 18),
+        Position = UDim2.new(0, 98, 0, 36),
+        Size = UDim2.new(1, -106, 0, 18),
         BackgroundTransparency = 1,
         Text = gameName .. "  •  " .. verifiedText .. "  •  " .. patchedText,
         TextColor3 = C.Muted,
@@ -1715,8 +1790,8 @@ local function addStoreListing(item, index)
     }, card)
 
     local previewButton = create("TextButton", {
-        Position = UDim2.new(0, 8, 0, 62),
-        Size = UDim2.new(0.49, -8, 0, 34),
+        Position = UDim2.new(0, 98, 0, 62),
+        Size = UDim2.new(0.49, -53, 0, 34),
         BackgroundColor3 = C.Panel,
         BorderSizePixel = 0,
         Text = "VIEW SOURCE",
@@ -1730,8 +1805,8 @@ local function addStoreListing(item, index)
     end)
 
     local copyButton = create("TextButton", {
-        Position = UDim2.new(0.51, 0, 0, 62),
-        Size = UDim2.new(0.49, -8, 0, 34),
+        Position = UDim2.new(0.51, 45, 0, 62),
+        Size = UDim2.new(0.49, -53, 0, 34),
         BackgroundColor3 = C.Panel,
         BorderSizePixel = 0,
         Text = "COPY SOURCE",
