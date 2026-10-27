@@ -940,6 +940,7 @@ local storeQuery = ""
 local storePage = 1
 local storeRequestId = 0
 local storeBusy = false
+local storeStrictMatch = false
 
 UI.Label(ScriptBloxPage, "SCRIPTBLOX STORE", 29, 14, C.Text).Font = Enum.Font.GothamBlack
 info(ScriptBloxPage, "Search community scripts. Review source before using it; this store copies source but never auto-executes it.", 55, C.Muted)
@@ -966,7 +967,19 @@ storeSearchPadding.PaddingLeft = UDim.new(0, 10)
 storeSearchPadding.PaddingRight = UDim.new(0, 8)
 storeSearchPadding.Parent = StoreSearchBox
 
-local StoreStatus = UI.Label(ScriptBloxPage, "Enter a search term or tap TRENDING.", 30, 10, C.Muted)
+local StoreStatus
+local MatchSearchButton = UI.Button(ScriptBloxPage, "MATCH SEARCH: OFF", function(button)
+    storeStrictMatch = not storeStrictMatch
+    button.Text = "MATCH SEARCH: " .. (storeStrictMatch and "ON" or "OFF")
+    button.BackgroundColor3 = storeStrictMatch and C.Blue or C.PanelAlt
+    StoreStatus.Text = storeStrictMatch
+        and "Match Search is ON: results use strict matching."
+        or "Match Search is OFF: results may be broader."
+    addLog("INFO", "ScriptBlox Match Search " .. (storeStrictMatch and "enabled" or "disabled"))
+end, 34)
+MatchSearchButton.Name = "ScriptBloxMatchSearch"
+
+StoreStatus = UI.Label(ScriptBloxPage, "Enter a search term or tap TRENDING.", 30, 10, C.Muted)
 StoreStatus.Name = "ScriptBloxStatus"
 StoreStatus.TextWrapped = true
 
@@ -1179,7 +1192,7 @@ UI.Button(ScriptBloxPage, "SEARCH SCRIPTS", function()
     end
     storeQuery = query
     storePage = 1
-    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(query) .. "&max=10&page=1&strict=false"
+    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(query) .. "&max=10&page=1&strict=" .. tostring(storeStrictMatch)
     fetchScriptBlox(endpoint, false, "Searching ScriptBlox for: " .. query)
 end)
 
@@ -1199,7 +1212,7 @@ UI.Button(ScriptBloxPage, "LOAD MORE SEARCH RESULTS", function()
         return
     end
     storePage = storePage + 1
-    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(storeQuery) .. "&max=10&page=" .. tostring(storePage) .. "&strict=false"
+    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(storeQuery) .. "&max=10&page=" .. tostring(storePage) .. "&strict=" .. tostring(storeStrictMatch)
     fetchScriptBlox(endpoint, true, "Loading page " .. tostring(storePage) .. "...")
 end)
 
