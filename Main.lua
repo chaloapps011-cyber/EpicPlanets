@@ -1,47 +1,71 @@
-
 --[[
-    EPIC PLANETS
-    Dark modular UI inspired by Uhhhhhh Reanimate's section-based layout.
-    Delta / Android. The title is randomized on every launch.
+    EPIC PLANETS + FLASH AUDIO
+    Delta / Android
+    MP3 starts when the intro flash begins.
 ]]
 
 local ENV = (type(getgenv) == "function" and getgenv()) or _G
 
--- Clean up an older copy so rerunning the HTTPS loader does not stack GUIs.
+-- Cleanup an older copy.
 if type(ENV.__EPIC_PLANETS_CONNECTIONS) == "table" then
     for _, connection in ipairs(ENV.__EPIC_PLANETS_CONNECTIONS) do
-        pcall(function() connection:Disconnect() end)
+        pcall(function()
+            connection:Disconnect()
+        end)
     end
 end
+
 if ENV.__EPIC_PLANETS_GUI then
-    pcall(function() ENV.__EPIC_PLANETS_GUI:Destroy() end)
+    pcall(function()
+        ENV.__EPIC_PLANETS_GUI:Destroy()
+    end)
 end
+
+if ENV.__EPIC_PLANETS_FLASH_SOUND then
+    pcall(function()
+        ENV.__EPIC_PLANETS_FLASH_SOUND:Stop()
+        ENV.__EPIC_PLANETS_FLASH_SOUND:Destroy()
+    end)
+    ENV.__EPIC_PLANETS_FLASH_SOUND = nil
+end
+
 if type(ENV.__EPIC_PLANETS_MODELS) == "table" then
     for _, oldModel in ipairs(ENV.__EPIC_PLANETS_MODELS) do
         if typeof(oldModel) == "Instance" and oldModel.Parent then
-            pcall(function() oldModel:Destroy() end)
+            pcall(function()
+                oldModel:Destroy()
+            end)
         end
     end
 end
+
 ENV.__EPIC_PLANETS_RUNNING = true
 ENV.__EPIC_PLANETS_CONNECTIONS = {}
 
 local function findExecutorFunction(name)
     local fn
-    pcall(function() fn = ENV[name] end)
+
+    pcall(function()
+        fn = ENV[name]
+    end)
+
     if type(fn) ~= "function" then
-        pcall(function() fn = _G[name] end)
+        pcall(function()
+            fn = _G[name]
+        end)
     end
+
     return type(fn) == "function" and fn or nil
 end
 
 local function executorCall(name, ...)
     local fn = findExecutorFunction(name)
+
     if not fn then
         return false, "Executor API unavailable: " .. name
     end
-    local ok, result = pcall(fn, ...)
-    return ok, result
+
+    return pcall(fn, ...)
 end
 
 local success, fatalError = pcall(function()
@@ -50,10 +74,13 @@ local success, fatalError = pcall(function()
     local RunService = game:GetService("RunService")
     local UserInputService = game:GetService("UserInputService")
     local World = game:GetService("Workspace")
+    local SoundService = game:GetService("SoundService")
+    local HttpService = game:GetService("HttpService")
 
     local player = Players.LocalPlayer
+
     if not player then
-        error("LocalPlayer não encontrado. Execute dentro de uma sessão do Roblox.")
+        error("LocalPlayer não encontrado.")
     end
 
     local playerGui = player:WaitForChild("PlayerGui")
@@ -68,12 +95,18 @@ local success, fatalError = pcall(function()
 
     local function make(className, properties, parent)
         local object = Instance.new(className)
+
         for property, value in pairs(properties or {}) do
             object[property] = value
         end
+
         object.Parent = parent
         return object
     end
+
+    ----------------------------------------------------------------------
+    -- COLORS / TITLE
+    ----------------------------------------------------------------------
 
     local COLORS = {
         background = Color3.fromRGB(8, 8, 11),
@@ -98,16 +131,129 @@ local success, fatalError = pcall(function()
     }
 
     math.randomseed(os.time() + math.floor(os.clock() * 100000))
+
     local previousTitle = tonumber(ENV.__EPIC_PLANETS_LAST_TITLE)
     local titleIndex = math.random(1, #titles)
 
-    -- Avoid repeating the last title when this script is re-executed.
     if #titles > 1 and titleIndex == previousTitle then
         repeat
             titleIndex = math.random(1, #titles)
         until titleIndex ~= previousTitle
     end
+
     ENV.__EPIC_PLANETS_LAST_TITLE = titleIndex
+
+    ----------------------------------------------------------------------
+    -- FILES / MP3
+    ----------------------------------------------------------------------
+
+    local ROOT = "workspace/epicplanets"
+    local MODULES = ROOT .. "/Modules"
+
+    local AUDIO_URL =
+        "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Screenrecorder-2026-09-18-20-34-50-385.mp3"
+
+    local AUDIO_PATH =
+        ROOT .. "/Screenrecorder-2026-09-18-20-34-50-385.mp3"
+
+    local function ensureFolders()
+        for _, folder in ipairs({"workspace", ROOT, MODULES}) do
+            local folderExists = false
+            local ok, result = executorCall("isfolder", folder)
+
+            if ok and result == true then
+                folderExists = true
+            end
+
+            if not folderExists then
+                executorCall("makefolder", folder)
+            end
+        end
+    end
+
+    pcall(ensureFolders)
+
+    -- This function never blocks the GUI from loading if audio fails.
+    local function prepareFlashAudio()
+        local checkOK, fileExists =
+            executorCall("isfile", AUDIO_PATH)
+
+        if not (checkOK and fileExists == true) then
+            local downloadOK, audioData = pcall(function()
+                return game:HttpGet(AUDIO_URL)
+            end)
+
+            if not downloadOK
+                or type(audioData) ~= "string"
+                or #audioData == 0 then
+
+                warn(
+                    "[EPIC PLANETS AUDIO] Download failed: "
+                    .. tostring(audioData)
+                )
+
+                return nil
+            end
+
+            local writeOK, writeError =
+                executorCall("writefile", AUDIO_PATH, audioData)
+
+            if not writeOK then
+                warn(
+                    "[EPIC PLANETS AUDIO] Could not save MP3: "
+                    .. tostring(writeError)
+                )
+
+                return nil
+            end
+        end
+
+        local assetOK, assetId =
+            executorCall("getcustomasset", AUDIO_PATH)
+
+        if not assetOK
+            or type(assetId) ~= "string"
+            or assetId == "" then
+
+            warn(
+                "[EPIC PLANETS AUDIO] getcustomasset failed: "
+                .. tostring(assetId)
+            )
+
+            return nil
+        end
+
+        local soundOK, sound = pcall(function()
+            local object = Instance.new("Sound")
+            object.Name = "EPIC_PLANETS_FLASH_AUDIO"
+            object.SoundId = assetId
+            object.Volume = 1
+            object.Looped = false
+            object.Parent = SoundService
+            return object
+        end)
+
+        if not soundOK then
+            warn(
+                "[EPIC PLANETS AUDIO] Could not create Sound: "
+                .. tostring(sound)
+            )
+
+            return nil
+        end
+
+        ENV.__EPIC_PLANETS_FLASH_SOUND = sound
+
+        print("[EPIC PLANETS AUDIO] MP3 prepared.")
+        return sound
+    end
+
+    -- Prepare the music before building the intro.
+    local flashSound = prepareFlashAudio()
+
+    ----------------------------------------------------------------------
+    -- UI HELPERS
+    ----------------------------------------------------------------------
 
     local function round(object, radius)
         make("UICorner", {
@@ -137,6 +283,7 @@ local success, fatalError = pcall(function()
             ),
             properties
         )
+
         animation:Play()
         return animation
     end
@@ -152,6 +299,13 @@ local success, fatalError = pcall(function()
             TextWrapped = true,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextYAlignment = Enum.TextYAlignment.Center,
+        }, parent)
+    end
+
+    local function addListLayout(parent, padding)
+        make("UIListLayout", {
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Padding = UDim.new(0, padding or 7),
         }, parent)
     end
 
@@ -173,6 +327,7 @@ local success, fatalError = pcall(function()
 
         bind(button.Activated, function()
             local ok, err = pcall(callback, button)
+
             if not ok then
                 warn("[EPIC PLANETS] Button error: " .. tostring(err))
             end
@@ -181,33 +336,9 @@ local success, fatalError = pcall(function()
         return button
     end
 
-    local function addListLayout(parent, padding)
-        make("UIListLayout", {
-            SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, padding or 7),
-        }, parent)
-    end
-
-    -- Delta file-manager path, not Roblox Workspace.
-    local ROOT = "workspace/epicplanets"
-    local MODULES = ROOT .. "/Modules"
-
-    local function ensureFolders()
-        for _, folder in ipairs({"workspace", ROOT, MODULES}) do
-            local folderExists = false
-            local ok, result = executorCall("isfolder", folder)
-
-            if ok and result == true then
-                folderExists = true
-            end
-
-            if not folderExists then
-                executorCall("makefolder", folder)
-            end
-        end
-    end
-
-    pcall(ensureFolders)
+    ----------------------------------------------------------------------
+    -- GUI
+    ----------------------------------------------------------------------
 
     local gui = make("ScreenGui", {
         Name = "EPIC_PLANETS_GUI",
@@ -220,7 +351,7 @@ local success, fatalError = pcall(function()
     ENV.__EPIC_PLANETS_GUI = gui
 
     ----------------------------------------------------------------------
-    -- INTRO: full screen only during the opening animation.
+    -- INTRO
     ----------------------------------------------------------------------
 
     local intro = make("Frame", {
@@ -241,7 +372,8 @@ local success, fatalError = pcall(function()
                 math.random(1, 3),
                 math.random(1, 3)
             ),
-            BackgroundColor3 = (i % 5 == 0) and COLORS.blue or COLORS.text,
+            BackgroundColor3 =
+                (i % 5 == 0) and COLORS.blue or COLORS.text,
             BackgroundTransparency = math.random(25, 75) / 100,
             BorderSizePixel = 0,
         }, intro)
@@ -359,7 +491,8 @@ local success, fatalError = pcall(function()
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(math.random(), math.random()),
             Size = UDim2.fromOffset(fragmentSize, fragmentSize),
-            BackgroundColor3 = i % 6 == 0 and COLORS.purple or COLORS.blue,
+            BackgroundColor3 =
+                i % 6 == 0 and COLORS.purple or COLORS.blue,
             BorderSizePixel = 0,
         }, fragmentArea)
 
@@ -412,7 +545,7 @@ local success, fatalError = pcall(function()
     outline(tapIn, 1, 0.08)
 
     ----------------------------------------------------------------------
-    -- MAIN WINDOW: dark window with a left navigation column.
+    -- MAIN WINDOW
     ----------------------------------------------------------------------
 
     local hub = make("Frame", {
@@ -567,11 +700,18 @@ local success, fatalError = pcall(function()
 
         addListLayout(page, 7)
         pages[name] = page
+
         return page
     end
 
     local function addInfo(parent, text, height, color)
-        return textLabel(parent, text, height or 42, color or COLORS.muted, 11)
+        return textLabel(
+            parent,
+            text,
+            height or 42,
+            color or COLORS.muted,
+            11
+        )
     end
 
     local function showPage(name)
@@ -584,6 +724,7 @@ local success, fatalError = pcall(function()
         for tabName, button in pairs(navButtons) do
             button.BackgroundColor3 =
                 tabName == name and COLORS.panelHover or COLORS.panelAlt
+
             button.TextColor3 =
                 tabName == name and COLORS.text or COLORS.muted
         end
@@ -607,7 +748,9 @@ local success, fatalError = pcall(function()
 
         round(button, 6)
         outline(button, 1, 0.65)
+
         navButtons[name] = button
+
         bind(button.Activated, function()
             showPage(name)
         end)
@@ -678,7 +821,9 @@ local success, fatalError = pcall(function()
     local flyVelocity = nil
     local flyGyro = nil
     local flyVertical = 0
-    local flyButton, speedButton, jumpButton
+    local flyButton
+    local speedButton
+    local jumpButton
 
     local function getCharacterParts()
         local character = player.Character
@@ -686,6 +831,7 @@ local success, fatalError = pcall(function()
 
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         local root = character:FindFirstChild("HumanoidRootPart")
+
         return humanoid, root
     end
 
@@ -706,6 +852,7 @@ local success, fatalError = pcall(function()
             if originalWalkSpeed then
                 humanoid.WalkSpeed = originalWalkSpeed
             end
+
             speedEnabled = false
         end
 
@@ -740,10 +887,8 @@ local success, fatalError = pcall(function()
                 if originalJumpPower then
                     humanoid.JumpPower = originalJumpPower
                 end
-            else
-                if originalJumpHeight then
-                    humanoid.JumpHeight = originalJumpHeight
-                end
+            elseif originalJumpHeight then
+                humanoid.JumpHeight = originalJumpHeight
             end
 
             jumpEnabled = false
@@ -766,22 +911,35 @@ local success, fatalError = pcall(function()
 
         if enabled then
             if flyVelocity then
-                pcall(function() flyVelocity:Destroy() end)
+                pcall(function()
+                    flyVelocity:Destroy()
+                end)
             end
+
             if flyGyro then
-                pcall(function() flyGyro:Destroy() end)
+                pcall(function()
+                    flyGyro:Destroy()
+                end)
             end
 
             flyVelocity = make("BodyVelocity", {
                 Name = "EP_FlyVelocity",
-                MaxForce = Vector3.new(1000000000, 1000000000, 1000000000),
+                MaxForce = Vector3.new(
+                    1000000000,
+                    1000000000,
+                    1000000000
+                ),
                 P = 12000,
                 Velocity = Vector3.zero,
             }, root)
 
             flyGyro = make("BodyGyro", {
                 Name = "EP_FlyGyro",
-                MaxTorque = Vector3.new(1000000000, 1000000000, 1000000000),
+                MaxTorque = Vector3.new(
+                    1000000000,
+                    1000000000,
+                    1000000000
+                ),
                 P = 9000,
                 CFrame = root.CFrame,
             }, root)
@@ -794,10 +952,15 @@ local success, fatalError = pcall(function()
             flyVertical = 0
 
             if flyVelocity then
-                pcall(function() flyVelocity:Destroy() end)
+                pcall(function()
+                    flyVelocity:Destroy()
+                end)
             end
+
             if flyGyro then
-                pcall(function() flyGyro:Destroy() end)
+                pcall(function()
+                    flyGyro:Destroy()
+                end)
             end
 
             flyVelocity = nil
@@ -809,6 +972,7 @@ local success, fatalError = pcall(function()
         end
 
         flyButton.Text = "Fly: " .. (flyEnabled and "ON" or "OFF")
+
         setStatus(
             flyEnabled
                 and "Fly enabled. Use joystick + UP/DOWN."
@@ -895,7 +1059,7 @@ local success, fatalError = pcall(function()
     )
 
     ----------------------------------------------------------------------
-    -- MODULES / MOVESETS
+    -- MOVESETS / MODULES
     ----------------------------------------------------------------------
 
     textLabel(movesetsPage, "MOVESETS / MODULES", 26, COLORS.text, 14).Font =
@@ -989,7 +1153,8 @@ local success, fatalError = pcall(function()
             if type(path) == "string"
                 and string.lower(path):sub(-4) == ".lua" then
 
-                found = found + 1
+                found += 1
+
                 local filePath = path
                 local shortName = path:match("[^/\\]+$") or path
 
@@ -1014,7 +1179,7 @@ local success, fatalError = pcall(function()
     statusButton(movesetsPage, "REFRESH MODULES", refreshModules)
 
     ----------------------------------------------------------------------
-    -- REANIMATION: uses only a module placed in the user's own folder.
+    -- REANIMATION
     ----------------------------------------------------------------------
 
     textLabel(reanimatePage, "REANIMATION", 26, COLORS.text, 14).Font =
@@ -1047,7 +1212,7 @@ local success, fatalError = pcall(function()
     end)
 
     ----------------------------------------------------------------------
-    -- MODEL STORE: local visual demo + copy-only external reference.
+    -- MODEL STORE
     ----------------------------------------------------------------------
 
     textLabel(modelsPage, "MODEL STORE", 26, COLORS.text, 14).Font =
@@ -1065,13 +1230,17 @@ local success, fatalError = pcall(function()
     local function removeAllModels()
         for _, entry in ipairs(installedModels) do
             if entry.model and entry.model.Parent then
-                pcall(function() entry.model:Destroy() end)
+                pcall(function()
+                    entry.model:Destroy()
+                end)
             end
         end
 
         for _, model in ipairs(ENV.__EPIC_PLANETS_MODELS or {}) do
             if typeof(model) == "Instance" and model.Parent then
-                pcall(function() model:Destroy() end)
+                pcall(function()
+                    model:Destroy()
+                end)
             end
         end
 
@@ -1085,7 +1254,8 @@ local success, fatalError = pcall(function()
 
     local function createOrbitalCore()
         local character = player.Character
-        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local root = character
+            and character:FindFirstChild("HumanoidRootPart")
 
         if not root then
             setStatus("Character root not ready")
@@ -1122,11 +1292,13 @@ local success, fatalError = pcall(function()
         end
 
         model.PrimaryPart = centerPart
+
         table.insert(installedModels, {
             model = model,
             center = centerPart,
             planets = orbitParts,
         })
+
         table.insert(ENV.__EPIC_PLANETS_MODELS, model)
 
         setStatus("Orbital Core installed")
@@ -1223,7 +1395,6 @@ local success, fatalError = pcall(function()
 
         task.wait(0.23)
 
-        -- Hide the entire intro overlay, not just its central panel.
         intro.Visible = false
         hub.Visible = true
         hub.Size = UDim2.new(0.84, 0, 0.68, 0)
@@ -1250,7 +1421,10 @@ local success, fatalError = pcall(function()
         setStatus("Window restored")
     end)
 
-    -- Drag the panel by holding its title.
+    ----------------------------------------------------------------------
+    -- DRAG WINDOW
+    ----------------------------------------------------------------------
+
     local dragging = false
     local dragStart = nil
     local startPosition = nil
@@ -1289,7 +1463,7 @@ local success, fatalError = pcall(function()
     end)
 
     ----------------------------------------------------------------------
-    -- INTRO ANIMATION: 321 fragments converge, flash once, then fade out.
+    -- INTRO ANIMATION
     ----------------------------------------------------------------------
 
     task.spawn(function()
@@ -1309,7 +1483,9 @@ local success, fatalError = pcall(function()
                 tween(progress, 0.12, {
                     Size = UDim2.new(i / total, 0, 1, 0),
                 })
-                fragmentCount.Text = tostring(i) .. " / " .. tostring(total)
+
+                fragmentCount.Text =
+                    tostring(i) .. " / " .. tostring(total)
             end
 
             task.wait(0.002)
@@ -1322,6 +1498,19 @@ local success, fatalError = pcall(function()
             fragment.BackgroundColor3 = COLORS.text
         end
 
+        --------------------------------------------------------------
+        -- AUDIO STARTS RIGHT BEFORE THE FLASH.
+        --------------------------------------------------------------
+
+        if flashSound and flashSound.Parent then
+            pcall(function()
+                flashSound:Stop()
+                flashSound.TimePosition = 0
+                flashSound:Play()
+            end)
+        end
+
+        -- FLASH START
         tween(introPanel, 0.08, {
             BackgroundColor3 = Color3.fromRGB(90, 95, 115),
         })
@@ -1339,8 +1528,13 @@ local success, fatalError = pcall(function()
             }, Enum.EasingStyle.Sine)
         end
 
-        tween(progress, 1.45, {BackgroundTransparency = 1})
-        tween(fragmentCount, 1.45, {TextTransparency = 1})
+        tween(progress, 1.45, {
+            BackgroundTransparency = 1,
+        })
+
+        tween(fragmentCount, 1.45, {
+            TextTransparency = 1,
+        })
 
         task.wait(1.55)
 
@@ -1359,12 +1553,9 @@ local success, fatalError = pcall(function()
     end)
 
     ----------------------------------------------------------------------
-    -- SMOOTH RAINBOW AURA, PLANET ORBIT AND LOCAL MODEL ANIMATION.
+    -- RAINBOW AURA / ORBITS / FLY / LOCAL MODELS
     ----------------------------------------------------------------------
 
-    local installedModels = {}
-
-    -- Shared tracking table is created here before any model is installed.
     ENV.__EPIC_PLANETS_MODELS = ENV.__EPIC_PLANETS_MODELS or {}
 
     bind(RunService.RenderStepped, function()
@@ -1435,6 +1626,7 @@ local success, fatalError = pcall(function()
 
                     for index, planet in ipairs(entry.planets) do
                         local angle = t * 1.1 + (index - 1) * math.pi / 2
+
                         local offset = Vector3.new(
                             math.cos(angle) * 2.7,
                             math.sin(angle * 1.4) * 0.6,
@@ -1481,10 +1673,24 @@ local success, fatalError = pcall(function()
 
     print("[EPIC PLANETS] GUI loaded.")
     print("[EPIC PLANETS] Modules folder: " .. MODULES)
+
+    if flashSound then
+        print("[EPIC PLANETS AUDIO] Ready to play on flash.")
+    else
+        warn("[EPIC PLANETS AUDIO] GUI loaded without audio.")
+    end
 end)
 
 if not success then
     warn("[EPIC PLANETS] Fatal error: " .. tostring(fatalError))
+
     ENV.__EPIC_PLANETS_RUNNING = nil
+
+    if ENV.__EPIC_PLANETS_GUI then
+        pcall(function()
+            ENV.__EPIC_PLANETS_GUI:Destroy()
+        end)
+    end
+
     ENV.__EPIC_PLANETS_GUI = nil
 end
