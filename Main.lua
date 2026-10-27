@@ -1,12 +1,22 @@
 --[[
-    EPIC PLANETS + FLASH AUDIO
+    EPIC PLANETS
+    Main.lua + BuiltinModules
     Delta / Android
-    MP3 starts when the intro flash begins.
+
+    BuiltinModules:
+      UI
+      Audio
+      Animations
+      Settings
+      ModuleLoader
 ]]
 
 local ENV = (type(getgenv) == "function" and getgenv()) or _G
 
--- Cleanup an older copy.
+----------------------------------------------------------------
+-- CLEANUP
+----------------------------------------------------------------
+
 if type(ENV.__EPIC_PLANETS_CONNECTIONS) == "table" then
     for _, connection in ipairs(ENV.__EPIC_PLANETS_CONNECTIONS) do
         pcall(function()
@@ -26,23 +36,94 @@ if ENV.__EPIC_PLANETS_FLASH_SOUND then
         ENV.__EPIC_PLANETS_FLASH_SOUND:Stop()
         ENV.__EPIC_PLANETS_FLASH_SOUND:Destroy()
     end)
-    ENV.__EPIC_PLANETS_FLASH_SOUND = nil
 end
 
 if type(ENV.__EPIC_PLANETS_MODELS) == "table" then
-    for _, oldModel in ipairs(ENV.__EPIC_PLANETS_MODELS) do
-        if typeof(oldModel) == "Instance" and oldModel.Parent then
-            pcall(function()
-                oldModel:Destroy()
-            end)
-        end
+    for _, model in ipairs(ENV.__EPIC_PLANETS_MODELS) do
+        pcall(function()
+            model:Destroy()
+        end)
     end
 end
 
-ENV.__EPIC_PLANETS_RUNNING = true
 ENV.__EPIC_PLANETS_CONNECTIONS = {}
+ENV.__EPIC_PLANETS_MODELS = {}
+ENV.__EPIC_PLANETS_RUNNING = true
 
-local function findExecutorFunction(name)
+local Connections = ENV.__EPIC_PLANETS_CONNECTIONS
+
+----------------------------------------------------------------
+-- SERVICES
+----------------------------------------------------------------
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local SoundService = game:GetService("SoundService")
+local Workspace = game:GetService("Workspace")
+
+local Player = Players.LocalPlayer
+
+if not Player then
+    error("[EPIC PLANETS] LocalPlayer not found.")
+end
+
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+----------------------------------------------------------------
+-- BUILTINMODULES: CORE
+----------------------------------------------------------------
+
+local BuiltinModules = {}
+
+BuiltinModules.Version = "1.0.0"
+BuiltinModules.Initialized = false
+
+BuiltinModules.Colors = {
+    Background = Color3.fromRGB(8, 8, 11),
+    Panel = Color3.fromRGB(17, 17, 22),
+    PanelAlt = Color3.fromRGB(26, 26, 33),
+    PanelHover = Color3.fromRGB(38, 38, 47),
+
+    Text = Color3.fromRGB(240, 240, 245),
+    Muted = Color3.fromRGB(157, 157, 170),
+
+    Blue = Color3.fromRGB(55, 145, 255),
+    Purple = Color3.fromRGB(173, 96, 255),
+    Green = Color3.fromRGB(72, 220, 145),
+    Red = Color3.fromRGB(245, 65, 75),
+}
+
+BuiltinModules.Settings = {
+    Rainbow = true,
+    Intro = true,
+    FlashAudio = true,
+    AudioVolume = 1,
+}
+
+BuiltinModules.Titles = {
+    "EPIC PLANETS",
+    "don't touch In builtinmodules",
+    "BLUEEEEEE",
+    "F up",
+    "April!",
+    "Dont kill the script",
+}
+
+math.randomseed(os.time() + math.floor(os.clock() * 100000))
+
+local Title = BuiltinModules.Titles[
+    math.random(1, #BuiltinModules.Titles)
+]
+
+----------------------------------------------------------------
+-- BUILTINMODULES: EXECUTOR
+----------------------------------------------------------------
+
+BuiltinModules.Executor = {}
+
+function BuiltinModules.Executor.Get(name)
     local fn
 
     pcall(function()
@@ -58,8 +139,8 @@ local function findExecutorFunction(name)
     return type(fn) == "function" and fn or nil
 end
 
-local function executorCall(name, ...)
-    local fn = findExecutorFunction(name)
+function BuiltinModules.Executor.Call(name, ...)
+    local fn = BuiltinModules.Executor.Get(name)
 
     if not fn then
         return false, "Executor API unavailable: " .. name
@@ -68,1501 +149,1423 @@ local function executorCall(name, ...)
     return pcall(fn, ...)
 end
 
-local success, fatalError = pcall(function()
-    local Players = game:GetService("Players")
-    local TweenService = game:GetService("TweenService")
-    local RunService = game:GetService("RunService")
-    local UserInputService = game:GetService("UserInputService")
-    local World = game:GetService("Workspace")
-    local SoundService = game:GetService("SoundService")
-    local HttpService = game:GetService("HttpService")
+----------------------------------------------------------------
+-- COMMON HELPERS
+----------------------------------------------------------------
 
-    local player = Players.LocalPlayer
+local function connect(signal, callback)
+    local connection = signal:Connect(callback)
+    table.insert(Connections, connection)
+    return connection
+end
 
-    if not player then
-        error("LocalPlayer não encontrado.")
+local function create(className, properties, parent)
+    local object = Instance.new(className)
+
+    for property, value in pairs(properties or {}) do
+        object[property] = value
     end
 
-    local playerGui = player:WaitForChild("PlayerGui")
-    local connections = ENV.__EPIC_PLANETS_CONNECTIONS
-    local rainbowStrokes = {}
+    object.Parent = parent
+    return object
+end
 
-    local function bind(signal, callback)
-        local connection = signal:Connect(callback)
-        table.insert(connections, connection)
-        return connection
+local function tween(object, duration, properties, style)
+    local animation = TweenService:Create(
+        object,
+        TweenInfo.new(
+            duration,
+            style or Enum.EasingStyle.Quad,
+            Enum.EasingDirection.Out
+        ),
+        properties
+    )
+
+    animation:Play()
+    return animation
+end
+
+local function setStatus(message)
+    local status = ENV.__EPIC_PLANETS_STATUS
+
+    if status and status.Parent then
+        status.Text = "Status: " .. tostring(message)
+    end
+end
+
+----------------------------------------------------------------
+-- BUILTINMODULES: AUDIO
+----------------------------------------------------------------
+
+BuiltinModules.Audio = {}
+
+BuiltinModules.Audio.URL =
+    "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Screenrecorder-2026-09-18-20-34-50-385.mp3"
+
+BuiltinModules.Audio.Folder = "EpicPlanets"
+
+BuiltinModules.Audio.File =
+    BuiltinModules.Audio.Folder
+    .. "/Screenrecorder-2026-09-18-20-34-50-385.mp3"
+
+function BuiltinModules.Audio.Prepare()
+    local executor = BuiltinModules.Executor
+
+    local folderOK, folderExists = executor.Call(
+        "isfolder",
+        BuiltinModules.Audio.Folder
+    )
+
+    if not folderOK or folderExists ~= true then
+        executor.Call("makefolder", BuiltinModules.Audio.Folder)
     end
 
-    local function make(className, properties, parent)
-        local object = Instance.new(className)
+    local checkOK, fileExists = executor.Call(
+        "isfile",
+        BuiltinModules.Audio.File
+    )
 
-        for property, value in pairs(properties or {}) do
-            object[property] = value
-        end
-
-        object.Parent = parent
-        return object
-    end
-
-    ----------------------------------------------------------------------
-    -- COLORS / TITLE
-    ----------------------------------------------------------------------
-
-    local COLORS = {
-        background = Color3.fromRGB(8, 8, 11),
-        panel = Color3.fromRGB(17, 17, 22),
-        panelAlt = Color3.fromRGB(26, 26, 33),
-        panelHover = Color3.fromRGB(38, 38, 47),
-        text = Color3.fromRGB(240, 240, 245),
-        muted = Color3.fromRGB(157, 157, 170),
-        red = Color3.fromRGB(245, 65, 75),
-        green = Color3.fromRGB(72, 220, 145),
-        blue = Color3.fromRGB(55, 145, 255),
-        purple = Color3.fromRGB(173, 96, 255),
-    }
-
-    local titles = {
-        {name = "Epic Planets", color = COLORS.text},
-        {name = "please don't touch In builtinmodules", color = COLORS.text},
-        {name = "BLUEEEEEE", color = Color3.fromRGB(0, 135, 255)},
-        {name = "F up", color = COLORS.red},
-        {name = "April!", color = COLORS.green},
-        {name = "Dont kill the script", color = COLORS.text},
-    }
-
-    math.randomseed(os.time() + math.floor(os.clock() * 100000))
-
-    local previousTitle = tonumber(ENV.__EPIC_PLANETS_LAST_TITLE)
-    local titleIndex = math.random(1, #titles)
-
-    if #titles > 1 and titleIndex == previousTitle then
-        repeat
-            titleIndex = math.random(1, #titles)
-        until titleIndex ~= previousTitle
-    end
-
-    ENV.__EPIC_PLANETS_LAST_TITLE = titleIndex
-
-    ----------------------------------------------------------------------
-    -- FILES / MP3
-    ----------------------------------------------------------------------
-
-    local ROOT = "workspace/epicplanets"
-    local MODULES = ROOT .. "/Modules"
-
-    local AUDIO_URL =
-        "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Screenrecorder-2026-09-18-20-34-50-385.mp3"
-
-    local AUDIO_PATH =
-        ROOT .. "/Screenrecorder-2026-09-18-20-34-50-385.mp3"
-
-    local function ensureFolders()
-        for _, folder in ipairs({"workspace", ROOT, MODULES}) do
-            local folderExists = false
-            local ok, result = executorCall("isfolder", folder)
-
-            if ok and result == true then
-                folderExists = true
-            end
-
-            if not folderExists then
-                executorCall("makefolder", folder)
-            end
-        end
-    end
-
-    pcall(ensureFolders)
-
-    -- This function never blocks the GUI from loading if audio fails.
-    local function prepareFlashAudio()
-        local checkOK, fileExists =
-            executorCall("isfile", AUDIO_PATH)
-
-        if not (checkOK and fileExists == true) then
-            local downloadOK, audioData = pcall(function()
-                return game:HttpGet(AUDIO_URL)
-            end)
-
-            if not downloadOK
-                or type(audioData) ~= "string"
-                or #audioData == 0 then
-
-                warn(
-                    "[EPIC PLANETS AUDIO] Download failed: "
-                    .. tostring(audioData)
-                )
-
-                return nil
-            end
-
-            local writeOK, writeError =
-                executorCall("writefile", AUDIO_PATH, audioData)
-
-            if not writeOK then
-                warn(
-                    "[EPIC PLANETS AUDIO] Could not save MP3: "
-                    .. tostring(writeError)
-                )
-
-                return nil
-            end
-        end
-
-        local assetOK, assetId =
-            executorCall("getcustomasset", AUDIO_PATH)
-
-        if not assetOK
-            or type(assetId) ~= "string"
-            or assetId == "" then
-
-            warn(
-                "[EPIC PLANETS AUDIO] getcustomasset failed: "
-                .. tostring(assetId)
-            )
-
-            return nil
-        end
-
-        local soundOK, sound = pcall(function()
-            local object = Instance.new("Sound")
-            object.Name = "EPIC_PLANETS_FLASH_AUDIO"
-            object.SoundId = assetId
-            object.Volume = 1
-            object.Looped = false
-            object.Parent = SoundService
-            return object
+    if not checkOK or fileExists ~= true then
+        local downloadOK, data = pcall(function()
+            return game:HttpGet(BuiltinModules.Audio.URL)
         end)
 
-        if not soundOK then
-            warn(
-                "[EPIC PLANETS AUDIO] Could not create Sound: "
-                .. tostring(sound)
-            )
-
+        if not downloadOK or type(data) ~= "string" or #data == 0 then
+            warn("[EPIC PLANETS AUDIO] MP3 download failed.")
             return nil
         end
 
-        ENV.__EPIC_PLANETS_FLASH_SOUND = sound
-
-        print("[EPIC PLANETS AUDIO] MP3 prepared.")
-        return sound
-    end
-
-    -- Prepare the music before building the intro.
-    local flashSound = prepareFlashAudio()
-
-    ----------------------------------------------------------------------
-    -- UI HELPERS
-    ----------------------------------------------------------------------
-
-    local function round(object, radius)
-        make("UICorner", {
-            CornerRadius = UDim.new(0, radius or 8),
-        }, object)
-    end
-
-    local function outline(object, thickness, transparency)
-        local stroke = make("UIStroke", {
-            Thickness = thickness or 1,
-            Transparency = transparency or 0.12,
-            Color = COLORS.blue,
-            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-        }, object)
-
-        table.insert(rainbowStrokes, stroke)
-        return stroke
-    end
-
-    local function tween(object, duration, properties, style)
-        local animation = TweenService:Create(
-            object,
-            TweenInfo.new(
-                duration,
-                style or Enum.EasingStyle.Quad,
-                Enum.EasingDirection.Out
-            ),
-            properties
+        local writeOK, writeError = executor.Call(
+            "writefile",
+            BuiltinModules.Audio.File,
+            data
         )
 
-        animation:Play()
-        return animation
+        if not writeOK then
+            warn(
+                "[EPIC PLANETS AUDIO] Could not save MP3: "
+                .. tostring(writeError)
+            )
+
+            return nil
+        end
     end
 
-    local function textLabel(parent, text, height, color, size)
-        return make("TextLabel", {
-            Size = UDim2.new(1, -4, 0, height or 32),
-            BackgroundTransparency = 1,
-            Text = text,
-            TextColor3 = color or COLORS.text,
-            TextSize = size or 13,
-            Font = Enum.Font.Gotham,
-            TextWrapped = true,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextYAlignment = Enum.TextYAlignment.Center,
-        }, parent)
+    local assetOK, assetId = executor.Call(
+        "getcustomasset",
+        BuiltinModules.Audio.File
+    )
+
+    if not assetOK or type(assetId) ~= "string" then
+        warn("[EPIC PLANETS AUDIO] Could not load audio asset.")
+        return nil
     end
 
-    local function addListLayout(parent, padding)
-        make("UIListLayout", {
-            SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, padding or 7),
-        }, parent)
+    local sound = Instance.new("Sound")
+    sound.Name = "EPIC_PLANETS_FLASH_AUDIO"
+    sound.SoundId = assetId
+    sound.Volume = BuiltinModules.Settings.AudioVolume
+    sound.Looped = false
+    sound.Parent = SoundService
+
+    ENV.__EPIC_PLANETS_FLASH_SOUND = sound
+
+    print("[EPIC PLANETS AUDIO] MP3 prepared.")
+
+    return sound
+end
+
+function BuiltinModules.Audio.PlayFlash()
+    if not BuiltinModules.Settings.FlashAudio then
+        return
     end
 
-    local function statusButton(parent, label, callback, height)
-        local button = make("TextButton", {
-            Size = UDim2.new(1, -4, 0, height or 40),
-            BackgroundColor3 = COLORS.panelAlt,
-            BorderSizePixel = 0,
-            AutoButtonColor = true,
-            Text = label,
-            TextColor3 = COLORS.text,
-            TextSize = 12,
-            Font = Enum.Font.GothamSemibold,
-            TextWrapped = true,
-        }, parent)
+    local sound = ENV.__EPIC_PLANETS_FLASH_SOUND
 
-        round(button, 7)
-        outline(button, 1, 0.35)
-
-        bind(button.Activated, function()
-            local ok, err = pcall(callback, button)
-
-            if not ok then
-                warn("[EPIC PLANETS] Button error: " .. tostring(err))
-            end
-        end)
-
-        return button
+    if not sound or not sound.Parent then
+        return
     end
 
-    ----------------------------------------------------------------------
-    -- GUI
-    ----------------------------------------------------------------------
+    pcall(function()
+        sound:Stop()
+        sound.TimePosition = 0
+        sound:Play()
+    end)
+end
 
-    local gui = make("ScreenGui", {
-        Name = "EPIC_PLANETS_GUI",
-        ResetOnSpawn = false,
-        IgnoreGuiInset = true,
-        DisplayOrder = 999,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    }, playerGui)
+----------------------------------------------------------------
+-- BUILTINMODULES: UI
+----------------------------------------------------------------
 
-    ENV.__EPIC_PLANETS_GUI = gui
+BuiltinModules.UI = {}
 
-    ----------------------------------------------------------------------
-    -- INTRO
-    ----------------------------------------------------------------------
+function BuiltinModules.UI.Round(object, radius)
+    create("UICorner", {
+        CornerRadius = UDim.new(0, radius or 8),
+    }, object)
+end
 
-    local intro = make("Frame", {
-        Name = "IntroScreen",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundColor3 = COLORS.background,
-        BorderSizePixel = 0,
-        Active = false,
-    }, gui)
+function BuiltinModules.UI.Stroke(object, color, transparency)
+    local stroke = create("UIStroke", {
+        Color = color or BuiltinModules.Colors.Blue,
+        Thickness = 1,
+        Transparency = transparency or 0.15,
+    }, object)
 
-    for i = 1, 65 do
-        local star = make("Frame", {
-            Position = UDim2.fromScale(
-                math.random(1, 99) / 100,
-                math.random(1, 99) / 100
-            ),
-            Size = UDim2.fromOffset(
-                math.random(1, 3),
-                math.random(1, 3)
-            ),
-            BackgroundColor3 =
-                (i % 5 == 0) and COLORS.blue or COLORS.text,
-            BackgroundTransparency = math.random(25, 75) / 100,
-            BorderSizePixel = 0,
-        }, intro)
+    return stroke
+end
 
-        round(star, 3)
-    end
-
-    local introTitle = make("TextLabel", {
-        Position = UDim2.new(0, 8, 0, 17),
-        Size = UDim2.new(1, -16, 0, 34),
+function BuiltinModules.UI.Label(parent, text, height, size, color)
+    return create("TextLabel", {
+        Size = UDim2.new(1, -4, 0, height or 30),
         BackgroundTransparency = 1,
-        Text = titles[titleIndex].name,
-        TextColor3 = titles[titleIndex].color,
-        TextSize = 21,
-        Font = Enum.Font.GothamBlack,
+        Text = text,
+        TextColor3 = color or BuiltinModules.Colors.Text,
+        TextSize = size or 12,
+        Font = Enum.Font.Gotham,
         TextWrapped = true,
-    }, intro)
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+    }, parent)
+end
 
-    local introPanel = make("Frame", {
-        Name = "IntroPanel",
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.53),
-        Size = UDim2.new(0.86, 0, 0.66, 0),
-        BackgroundColor3 = COLORS.panel,
+function BuiltinModules.UI.Button(parent, text, callback, height)
+    local button = create("TextButton", {
+        Size = UDim2.new(1, -4, 0, height or 38),
+        BackgroundColor3 = BuiltinModules.Colors.PanelAlt,
         BorderSizePixel = 0,
-    }, intro)
-
-    make("UISizeConstraint", {
-        MinSize = Vector2.new(275, 350),
-        MaxSize = Vector2.new(480, 530),
-    }, introPanel)
-
-    round(introPanel, 12)
-    outline(introPanel, 1, 0.08)
-
-    local introStatus = make("TextLabel", {
-        Position = UDim2.new(0, 12, 0, 9),
-        Size = UDim2.new(1, -24, 0, 23),
-        BackgroundTransparency = 1,
-        Text = "ASSEMBLING 321 FRAGMENTS",
-        TextColor3 = COLORS.text,
+        Text = text,
+        TextColor3 = BuiltinModules.Colors.Text,
         TextSize = 11,
         Font = Enum.Font.GothamBold,
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, introPanel)
+        TextWrapped = true,
+        AutoButtonColor = true,
+    }, parent)
 
-    local orbit = make("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, 37),
-        Size = UDim2.fromOffset(150, 108),
-        BackgroundTransparency = 1,
-    }, introPanel)
+    BuiltinModules.UI.Round(button, 7)
+    BuiltinModules.UI.Stroke(button, nil, 0.4)
 
-    local core = make("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(24, 24),
-        BackgroundColor3 = COLORS.text,
-        BorderSizePixel = 0,
-    }, orbit)
+    connect(button.Activated, function()
+        local ok, err = pcall(callback, button)
 
-    round(core, 30)
-    outline(core, 1, 0.05)
+        if not ok then
+            warn("[EPIC PLANETS] Button error: " .. tostring(err))
+        end
+    end)
 
-    local planetColors = {
-        COLORS.blue,
-        COLORS.purple,
-        COLORS.green,
-        Color3.fromRGB(255, 170, 65),
+    return button
+end
+
+----------------------------------------------------------------
+-- BUILTINMODULES: MODULE LOADER
+----------------------------------------------------------------
+
+BuiltinModules.ModuleLoader = {}
+
+BuiltinModules.ModuleLoader.Folder = "EpicPlanets/Modules"
+
+function BuiltinModules.ModuleLoader.EnsureFolders()
+    local executor = BuiltinModules.Executor
+
+    local folders = {
+        "EpicPlanets",
+        BuiltinModules.ModuleLoader.Folder,
     }
+
+    for _, folder in ipairs(folders) do
+        local ok, exists = executor.Call("isfolder", folder)
+
+        if not ok or exists ~= true then
+            executor.Call("makefolder", folder)
+        end
+    end
+end
+
+function BuiltinModules.ModuleLoader.List()
+    BuiltinModules.ModuleLoader.EnsureFolders()
+
+    local listFunction =
+        BuiltinModules.Executor.Get("listfiles")
+
+    if not listFunction then
+        return nil, "listfiles unavailable"
+    end
+
+    local ok, result = pcall(
+        listFunction,
+        BuiltinModules.ModuleLoader.Folder
+    )
+
+    if not ok or type(result) ~= "table" then
+        return nil, "Could not read Modules folder"
+    end
+
+    return result
+end
+
+function BuiltinModules.ModuleLoader.Run(path)
+    local executor = BuiltinModules.Executor
+    local readOK, source = executor.Call("readfile", path)
+
+    if not readOK or type(source) ~= "string" then
+        return false, "Could not read module file"
+    end
+
+    local loadFunction = executor.Get("loadstring")
+
+    if not loadFunction then
+        return false, "loadstring unavailable"
+    end
+
+    local compileOK, chunk = pcall(loadFunction, source)
+
+    if not compileOK or type(chunk) ~= "function" then
+        return false, tostring(chunk)
+    end
+
+    local runOK, result = pcall(chunk)
+
+    if not runOK then
+        return false, tostring(result)
+    end
+
+    return true, "Module executed"
+end
+
+----------------------------------------------------------------
+-- PREPARE AUDIO BEFORE INTRO
+----------------------------------------------------------------
+
+BuiltinModules.ModuleLoader.EnsureFolders()
+
+local flashSound = BuiltinModules.Audio.Prepare()
+
+----------------------------------------------------------------
+-- GUI ROOT
+----------------------------------------------------------------
+
+local C = BuiltinModules.Colors
+local UI = BuiltinModules.UI
+
+local GUI = create("ScreenGui", {
+    Name = "EPIC_PLANETS_GUI",
+    ResetOnSpawn = false,
+    IgnoreGuiInset = true,
+    DisplayOrder = 999,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, PlayerGui)
+
+ENV.__EPIC_PLANETS_GUI = GUI
+
+----------------------------------------------------------------
+-- INTRO
+----------------------------------------------------------------
+
+local Intro = create("Frame", {
+    Name = "IntroScreen",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundColor3 = C.Background,
+    BorderSizePixel = 0,
+}, GUI)
+
+for i = 1, 65 do
+    local star = create("Frame", {
+        Position = UDim2.fromScale(
+            math.random(1, 99) / 100,
+            math.random(1, 99) / 100
+        ),
+        Size = UDim2.fromOffset(
+            math.random(1, 3),
+            math.random(1, 3)
+        ),
+        BackgroundColor3 = i % 5 == 0 and C.Blue or C.Text,
+        BackgroundTransparency = math.random(25, 75) / 100,
+        BorderSizePixel = 0,
+    }, Intro)
+
+    UI.Round(star, 4)
+end
+
+local IntroTitle = create("TextLabel", {
+    Position = UDim2.new(0, 8, 0, 17),
+    Size = UDim2.new(1, -16, 0, 34),
+    BackgroundTransparency = 1,
+    Text = Title,
+    TextColor3 = C.Text,
+    TextSize = 20,
+    Font = Enum.Font.GothamBlack,
+    TextWrapped = true,
+}, Intro)
+
+local IntroPanel = create("Frame", {
+    Name = "IntroPanel",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.53),
+    Size = UDim2.new(0.86, 0, 0.66, 0),
+    BackgroundColor3 = C.Panel,
+    BorderSizePixel = 0,
+}, Intro)
+
+local introConstraint = Instance.new("UISizeConstraint")
+introConstraint.MinSize = Vector2.new(275, 350)
+introConstraint.MaxSize = Vector2.new(480, 530)
+introConstraint.Parent = IntroPanel
+
+UI.Round(IntroPanel, 12)
+UI.Stroke(IntroPanel, C.Blue, 0.08)
+
+local IntroStatus = create("TextLabel", {
+    Position = UDim2.new(0, 12, 0, 9),
+    Size = UDim2.new(1, -24, 0, 23),
+    BackgroundTransparency = 1,
+    Text = "ASSEMBLING 321 FRAGMENTS",
+    TextColor3 = C.Text,
+    TextSize = 11,
+    Font = Enum.Font.GothamBold,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, IntroPanel)
+
+local Orbit = create("Frame", {
+    AnchorPoint = Vector2.new(0.5, 0),
+    Position = UDim2.new(0.5, 0, 0, 37),
+    Size = UDim2.fromOffset(150, 108),
+    BackgroundTransparency = 1,
+}, IntroPanel)
+
+local Core = create("Frame", {
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.fromOffset(24, 24),
+    BackgroundColor3 = C.Text,
+    BorderSizePixel = 0,
+}, Orbit)
+
+UI.Round(Core, 20)
+UI.Stroke(Core, C.Blue, 0.1)
+
+local PlanetColors = {
+    C.Blue,
+    C.Purple,
+    C.Green,
+    Color3.fromRGB(255, 170, 65),
+}
+
+local Planets = {}
+
+for i = 1, 4 do
+    local planet = create("Frame", {
+        Name = "Planet" .. i,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Size = UDim2.fromOffset(i % 2 == 0 and 16 or 12,
+                               i % 2 == 0 and 16 or 12),
+        BackgroundColor3 = PlanetColors[i],
+        BorderSizePixel = 0,
+    }, Orbit)
+
+    UI.Round(planet, 20)
+    Planets[i] = planet
+end
+
+local Ring = create("Frame", {
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = UDim2.fromOffset(92, 72),
+    BackgroundTransparency = 1,
+}, Orbit)
+
+UI.Round(Ring, 40)
+UI.Stroke(Ring, C.Blue, 0.55)
+
+local FragmentArea = create("Frame", {
+    Position = UDim2.new(0, 10, 0, 151),
+    Size = UDim2.new(1, -20, 0, 105),
+    BackgroundTransparency = 1,
+    ClipsDescendants = true,
+}, IntroPanel)
+
+local Fragments = {}
+
+for i = 1, 321 do
+    local fragmentSize = math.random(2, 5)
+
+    local fragment = create("Frame", {
+        Name = "Fragment" .. i,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(math.random(), math.random()),
+        Size = UDim2.fromOffset(fragmentSize, fragmentSize),
+        BackgroundColor3 = i % 6 == 0 and C.Purple or C.Blue,
+        BorderSizePixel = 0,
+    }, FragmentArea)
+
+    UI.Round(fragment, 4)
+    Fragments[i] = fragment
+end
+
+local ProgressBack = create("Frame", {
+    Position = UDim2.new(0, 14, 1, -43),
+    Size = UDim2.new(1, -28, 0, 5),
+    BackgroundColor3 = C.PanelAlt,
+    BorderSizePixel = 0,
+}, IntroPanel)
+
+UI.Round(ProgressBack, 4)
+
+local Progress = create("Frame", {
+    Size = UDim2.new(0, 0, 1, 0),
+    BackgroundColor3 = C.Blue,
+    BorderSizePixel = 0,
+}, ProgressBack)
+
+UI.Round(Progress, 4)
+
+local FragmentCount = create("TextLabel", {
+    Position = UDim2.new(0, 0, 1, -32),
+    Size = UDim2.new(1, 0, 0, 16),
+    BackgroundTransparency = 1,
+    Text = "0 / 321",
+    TextColor3 = C.Muted,
+    TextSize = 10,
+    Font = Enum.Font.Code,
+}, IntroPanel)
+
+local TapIn = create("TextButton", {
+    Name = "TapIn",
+    AnchorPoint = Vector2.new(0.5, 1),
+    Position = UDim2.new(0.5, 0, 1, -50),
+    Size = UDim2.new(0.7, 0, 0, 40),
+    BackgroundColor3 = C.PanelAlt,
+    BorderSizePixel = 0,
+    Text = "T A P   I N",
+    TextColor3 = C.Text,
+    TextSize = 14,
+    Font = Enum.Font.GothamBlack,
+    Visible = false,
+}, IntroPanel)
+
+UI.Round(TapIn, 7)
+UI.Stroke(TapIn, C.Blue, 0.08)
+
+----------------------------------------------------------------
+-- MAIN HUB
+----------------------------------------------------------------
+
+local Hub = create("Frame", {
+    Name = "MainHub",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.51),
+    Size = UDim2.new(0.91, 0, 0.74, 0),
+    BackgroundColor3 = C.Panel,
+    BorderSizePixel = 0,
+    Visible = false,
+}, GUI)
+
+local hubConstraint = Instance.new("UISizeConstraint")
+hubConstraint.MinSize = Vector2.new(300, 370)
+hubConstraint.MaxSize = Vector2.new(640, 590)
+hubConstraint.Parent = Hub
+
+UI.Round(Hub, 11)
+UI.Stroke(Hub, C.Blue, 0.05)
+
+local Header = create("TextLabel", {
+    Position = UDim2.new(0, 12, 0, 7),
+    Size = UDim2.new(1, -92, 0, 28),
+    BackgroundTransparency = 1,
+    Text = Title,
+    TextColor3 = C.Text,
+    TextSize = 17,
+    Font = Enum.Font.GothamBlack,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd,
+}, Hub)
+
+local Minimize = create("TextButton", {
+    Position = UDim2.new(1, -42, 0, 8),
+    Size = UDim2.fromOffset(30, 28),
+    BackgroundColor3 = C.PanelAlt,
+    BorderSizePixel = 0,
+    Text = "×",
+    TextColor3 = C.Text,
+    TextSize = 19,
+    Font = Enum.Font.GothamBold,
+}, Hub)
+
+UI.Round(Minimize, 6)
+UI.Stroke(Minimize, C.Blue, 0.3)
+
+local Sidebar = create("Frame", {
+    Name = "Sidebar",
+    Position = UDim2.new(0, 10, 0, 48),
+    Size = UDim2.new(0, 102, 1, -81),
+    BackgroundColor3 = C.Background,
+    BorderSizePixel = 0,
+}, Hub)
+
+UI.Round(Sidebar, 7)
+UI.Stroke(Sidebar, C.Blue, 0.55)
+
+local sidePadding = Instance.new("UIPadding")
+sidePadding.PaddingTop = UDim.new(0, 7)
+sidePadding.PaddingLeft = UDim.new(0, 6)
+sidePadding.PaddingRight = UDim.new(0, 6)
+sidePadding.Parent = Sidebar
+
+local sideLayout = Instance.new("UIListLayout")
+sideLayout.Padding = UDim.new(0, 6)
+sideLayout.SortOrder = Enum.SortOrder.LayoutOrder
+sideLayout.Parent = Sidebar
+
+local PageHost = create("Frame", {
+    Name = "PageHost",
+    Position = UDim2.new(0, 120, 0, 48),
+    Size = UDim2.new(1, -130, 1, -81),
+    BackgroundColor3 = C.Background,
+    BorderSizePixel = 0,
+}, Hub)
+
+UI.Round(PageHost, 7)
+UI.Stroke(PageHost, C.Blue, 0.55)
+
+local Status = create("TextLabel", {
+    Position = UDim2.new(0, 12, 1, -25),
+    Size = UDim2.new(1, -24, 0, 17),
+    BackgroundTransparency = 1,
+    Text = "Status: Ready",
+    TextColor3 = C.Muted,
+    TextSize = 9,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextTruncate = Enum.TextTruncate.AtEnd,
+}, Hub)
+
+ENV.__EPIC_PLANETS_STATUS = Status
+
+local Mini = create("TextButton", {
+    Name = "EP_MiniIcon",
+    AnchorPoint = Vector2.new(0, 0.5),
+    Position = UDim2.new(0, 12, 0.56, 0),
+    Size = UDim2.fromOffset(42, 42),
+    BackgroundColor3 = C.Background,
+    BorderSizePixel = 0,
+    Text = "EP",
+    TextColor3 = C.Text,
+    TextSize = 13,
+    Font = Enum.Font.GothamBlack,
+    Visible = false,
+    ZIndex = 100,
+}, GUI)
+
+UI.Round(Mini, 10)
+UI.Stroke(Mini, C.Blue, 0.02)
+
+----------------------------------------------------------------
+-- PAGE SYSTEM
+----------------------------------------------------------------
+
+local Pages = {}
+local Tabs = {}
+
+local function makePage(name)
+    local page = create("ScrollingFrame", {
+        Name = name .. "Page",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = C.Blue,
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        Visible = false,
+    }, PageHost)
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 8)
+    padding.PaddingBottom = UDim.new(0, 8)
+    padding.PaddingLeft = UDim.new(0, 8)
+    padding.PaddingRight = UDim.new(0, 8)
+    padding.Parent = page
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 7)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = page
+
+    Pages[name] = page
+    return page
+end
+
+local function info(parent, text, height, color)
+    return UI.Label(
+        parent,
+        text,
+        height or 42,
+        11,
+        color or C.Muted
+    )
+end
+
+local function showPage(name)
+    if not Pages[name] then
+        return
+    end
+
+    for pageName, page in pairs(Pages) do
+        page.Visible = pageName == name
+    end
+
+    for tabName, button in pairs(Tabs) do
+        button.BackgroundColor3 =
+            tabName == name and C.PanelHover or C.PanelAlt
+
+        button.TextColor3 =
+            tabName == name and C.Text or C.Muted
+    end
+
+    setStatus("Opened " .. name)
+end
+
+local function addTab(name, label, order)
+    local button = create("TextButton", {
+        Name = "Tab_" .. name,
+        LayoutOrder = order,
+        Size = UDim2.new(1, 0, 0, 35),
+        BackgroundColor3 = C.PanelAlt,
+        BorderSizePixel = 0,
+        Text = label,
+        TextColor3 = C.Muted,
+        TextSize = 10,
+        Font = Enum.Font.GothamBold,
+        TextWrapped = true,
+    }, Sidebar)
+
+    UI.Round(button, 6)
+    UI.Stroke(button, C.Blue, 0.65)
+
+    Tabs[name] = button
+
+    connect(button.Activated, function()
+        showPage(name)
+    end)
+end
+
+local HomePage = makePage("Home")
+local PlayerPage = makePage("Player")
+local BuiltinPage = makePage("BuiltinModules")
+local MovesetsPage = makePage("Movesets")
+local ModelsPage = makePage("Models")
+local SettingsPage = makePage("Settings")
+
+addTab("Home", "HOME", 1)
+addTab("Player", "PLAYER", 2)
+addTab("BuiltinModules", "BUILTINS", 3)
+addTab("Movesets", "MOVESETS", 4)
+addTab("Models", "MODEL STORE", 5)
+addTab("Settings", "SETTINGS", 6)
+
+----------------------------------------------------------------
+-- HOME
+----------------------------------------------------------------
+
+local homeTitle = UI.Label(
+    HomePage,
+    "EPIC PLANETS",
+    28,
+    16,
+    C.Text
+)
+
+homeTitle.Font = Enum.Font.GothamBlack
+
+info(
+    HomePage,
+    "Dark modular interface with a 321-fragment intro, planets, audio and built-in components.",
+    54
+)
+
+info(HomePage, "Player: " .. Player.Name, 24, C.Text)
+info(HomePage, "Place ID: " .. tostring(game.PlaceId), 24)
+info(HomePage, "BuiltinModules: " .. BuiltinModules.Version, 24, C.Blue)
+
+UI.Button(HomePage, "OPEN BUILTINMODULES", function()
+    showPage("BuiltinModules")
+end)
+
+UI.Button(HomePage, "MINIMIZE TO EP ICON", function()
+    Hub.Visible = false
+    Mini.Visible = true
+    setStatus("Minimized")
+end)
+
+----------------------------------------------------------------
+-- PLAYER
+----------------------------------------------------------------
+
+UI.Label(PlayerPage, "PLAYER CONTROLS", 27, 14, C.Text).Font =
+    Enum.Font.GothamBold
+
+info(
+    PlayerPage,
+    "Client-side movement controls. A game can override these values.",
+    44
+)
+
+local speedEnabled = false
+local jumpEnabled = false
+local flyEnabled = false
+
+local oldSpeed
+local oldJumpPower
+local oldJumpHeight
+
+local flyVelocity
+local flyGyro
+local vertical = 0
+
+local function getCharacterParts()
+    local character = Player.Character
+
+    if not character then
+        return nil, nil
+    end
+
+    return character:FindFirstChildOfClass("Humanoid"),
+        character:FindFirstChild("HumanoidRootPart")
+end
+
+UI.Button(PlayerPage, "TOGGLE SPEED", function(button)
+    local humanoid = getCharacterParts()
+
+    if not humanoid then
+        setStatus("Character not ready")
+        return
+    end
+
+    if not speedEnabled then
+        oldSpeed = humanoid.WalkSpeed
+        humanoid.WalkSpeed = 32
+        speedEnabled = true
+        button.Text = "SPEED: ON"
+    else
+        if oldSpeed then
+            humanoid.WalkSpeed = oldSpeed
+        end
+
+        speedEnabled = false
+        button.Text = "TOGGLE SPEED"
+    end
+
+    setStatus(speedEnabled and "Speed enabled" or "Speed restored")
+end)
+
+UI.Button(PlayerPage, "TOGGLE HIGH JUMP", function(button)
+    local humanoid = getCharacterParts()
+
+    if not humanoid then
+        setStatus("Character not ready")
+        return
+    end
+
+    if not jumpEnabled then
+        oldJumpPower = humanoid.JumpPower
+        oldJumpHeight = humanoid.JumpHeight
+
+        if humanoid.UseJumpPower then
+            humanoid.JumpPower = 100
+        else
+            humanoid.JumpHeight = 50
+        end
+
+        jumpEnabled = true
+        button.Text = "HIGH JUMP: ON"
+    else
+        if humanoid.UseJumpPower then
+            if oldJumpPower then
+                humanoid.JumpPower = oldJumpPower
+            end
+        elseif oldJumpHeight then
+            humanoid.JumpHeight = oldJumpHeight
+        end
+
+        jumpEnabled = false
+        button.Text = "TOGGLE HIGH JUMP"
+    end
+
+    setStatus(jumpEnabled and "High jump enabled" or "Jump restored")
+end)
+
+local function setFly(enabled)
+    local humanoid, root = getCharacterParts()
+
+    if enabled and (not humanoid or not root) then
+        setStatus("Character not ready")
+        return
+    end
+
+    if enabled then
+        if flyVelocity then
+            flyVelocity:Destroy()
+        end
+
+        if flyGyro then
+            flyGyro:Destroy()
+        end
+
+        flyVelocity = create("BodyVelocity", {
+            Name = "EP_FlyVelocity",
+            MaxForce = Vector3.new(1e9, 1e9, 1e9),
+            P = 12000,
+            Velocity = Vector3.zero,
+        }, root)
+
+        flyGyro = create("BodyGyro", {
+            Name = "EP_FlyGyro",
+            MaxTorque = Vector3.new(1e9, 1e9, 1e9),
+            P = 9000,
+            CFrame = root.CFrame,
+        }, root)
+
+        humanoid.AutoRotate = false
+        flyEnabled = true
+        vertical = 0
+    else
+        flyEnabled = false
+        vertical = 0
+
+        if flyVelocity then
+            flyVelocity:Destroy()
+        end
+
+        if flyGyro then
+            flyGyro:Destroy()
+        end
+
+        flyVelocity = nil
+        flyGyro = nil
+
+        if humanoid then
+            humanoid.AutoRotate = true
+        end
+    end
+
+    setStatus(flyEnabled and "Fly enabled" or "Fly disabled")
+end
+
+UI.Button(PlayerPage, "TOGGLE FLY", function(button)
+    setFly(not flyEnabled)
+    button.Text = flyEnabled and "FLY: ON" or "TOGGLE FLY"
+end)
+
+local verticalRow = create("Frame", {
+    Size = UDim2.new(1, -4, 0, 42),
+    BackgroundTransparency = 1,
+}, PlayerPage)
+
+local upButton = create("TextButton", {
+    Size = UDim2.new(0.49, 0, 1, 0),
+    BackgroundColor3 = C.PanelAlt,
+    BorderSizePixel = 0,
+    Text = "HOLD UP",
+    TextColor3 = C.Text,
+    TextSize = 11,
+    Font = Enum.Font.GothamBold,
+}, verticalRow)
+
+UI.Round(upButton, 6)
+
+local downButton = create("TextButton", {
+    Position = UDim2.new(0.51, 0, 0, 0),
+    Size = UDim2.new(0.49, 0, 1, 0),
+    BackgroundColor3 = C.PanelAlt,
+    BorderSizePixel = 0,
+    Text = "HOLD DOWN",
+    TextColor3 = C.Text,
+    TextSize = 11,
+    Font = Enum.Font.GothamBold,
+}, verticalRow)
+
+UI.Round(downButton, 6)
+
+local function holdAltitude(button, value)
+    connect(button.InputBegan, function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+            or input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+            if flyEnabled then
+                vertical = value
+            else
+                setStatus("Activate Fly first")
+            end
+        end
+    end)
+
+    connect(button.InputEnded, function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+            or input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+            if vertical == value then
+                vertical = 0
+            end
+        end
+    end)
+end
+
+holdAltitude(upButton, 1)
+holdAltitude(downButton, -1)
+
+info(
+    PlayerPage,
+    "Activate Fly, steer with the movement joystick, and hold UP or DOWN for altitude.",
+    48
+)
+
+----------------------------------------------------------------
+-- BUILTINMODULES PAGE
+----------------------------------------------------------------
+
+UI.Label(BuiltinPage, "BUILTINMODULES", 27, 14, C.Text).Font =
+    Enum.Font.GothamBlack
+
+info(
+    BuiltinPage,
+    "Internal components that run inside Main.lua.",
+    32
+)
+
+local function componentInfo(name, description)
+    UI.Button(BuiltinPage, name, function()
+        setStatus(description)
+    end, 36)
+end
+
+componentInfo("UI", "UI module: buttons, labels, frames and animations.")
+componentInfo("Audio", "Audio module: MP3 preparation and flash playback.")
+componentInfo("ModuleLoader", "ModuleLoader: scans local Lua module files.")
+componentInfo("Settings", "Settings: audio, intro and visual options.")
+componentInfo("Animations", "Animations: intro fragments and orbital effects.")
+
+UI.Button(BuiltinPage, "REPLAY FLASH AUDIO", function()
+    BuiltinModules.Audio.PlayFlash()
+    setStatus("Flash audio requested")
+end)
+
+info(
+    BuiltinPage,
+    "The title 'don't touch In builtinmodules' is one of the random titles.",
+    42,
+    C.Blue
+)
+
+----------------------------------------------------------------
+-- MOVESETS / LOCAL LUA MODULES
+----------------------------------------------------------------
+
+UI.Label(MovesetsPage, "MOVESETS / MODULES", 27, 14, C.Text).Font =
+    Enum.Font.GothamBold
+
+info(
+    MovesetsPage,
+    "Place your local .lua modules in this folder:",
+    32
+)
+
+info(
+    MovesetsPage,
+    BuiltinModules.ModuleLoader.Folder,
+    30,
+    C.Blue
+)
+
+local moduleList = create("Frame", {
+    Name = "ModuleList",
+    Size = UDim2.new(1, -4, 0, 0),
+    AutomaticSize = Enum.AutomaticSize.Y,
+    BackgroundTransparency = 1,
+}, MovesetsPage)
+
+local moduleLayout = Instance.new("UIListLayout")
+moduleLayout.Padding = UDim.new(0, 6)
+moduleLayout.SortOrder = Enum.SortOrder.LayoutOrder
+moduleLayout.Parent = moduleList
+
+local function refreshModules()
+    for _, child in ipairs(moduleList:GetChildren()) do
+        if child:IsA("GuiObject") then
+            child:Destroy()
+        end
+    end
+
+    local files, message = BuiltinModules.ModuleLoader.List()
+
+    if not files then
+        info(moduleList, message or "Could not scan folder.", 44, C.Red)
+        setStatus("Module scan failed")
+        return
+    end
+
+    local count = 0
+
+    for _, path in ipairs(files) do
+        if type(path) == "string"
+            and path:lower():sub(-4) == ".lua" then
+
+            count = count + 1
+
+            local filePath = path
+            local fileName = path:match("[^/\\]+$") or path
+
+            UI.Button(moduleList, "RUN  " .. fileName, function()
+                local ok, result =
+                    BuiltinModules.ModuleLoader.Run(filePath)
+
+                setStatus(ok and result or ("Error: " .. tostring(result)))
+            end, 38)
+        end
+    end
+
+    if count == 0 then
+        info(
+            moduleList,
+            "No .lua files found. Add one to the folder above.",
+            45
+        )
+    end
+
+    setStatus("Found " .. tostring(count) .. " module(s)")
+end
+
+UI.Button(MovesetsPage, "REFRESH MODULES", refreshModules)
+
+----------------------------------------------------------------
+-- MODEL STORE
+----------------------------------------------------------------
+
+UI.Label(ModelsPage, "MODEL STORE", 27, 14, C.Text).Font =
+    Enum.Font.GothamBold
+
+info(
+    ModelsPage,
+    "Install client-side visual models that follow your character.",
+    42
+)
+
+local installedModels = ENV.__EPIC_PLANETS_MODELS
+
+local function createOrbitalCore()
+    local character = Player.Character
+    local root = character
+        and character:FindFirstChild("HumanoidRootPart")
+
+    if not root then
+        setStatus("Character root not ready")
+        return
+    end
+
+    local model = Instance.new("Model")
+    model.Name = "EP_OrbitalCore"
+    model.Parent = Workspace
+
+    local center = Instance.new("Part")
+    center.Name = "Core"
+    center.Shape = Enum.PartType.Ball
+    center.Size = Vector3.new(1.7, 1.7, 1.7)
+    center.Anchored = true
+    center.CanCollide = false
+    center.Material = Enum.Material.Neon
+    center.Color = C.Blue
+    center.Parent = model
 
     local planets = {}
 
     for i = 1, 4 do
-        local planet = make("Frame", {
-            Name = "Planet" .. i,
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Size = UDim2.fromOffset(
-                i % 2 == 0 and 16 or 12,
-                i % 2 == 0 and 16 or 12
-            ),
-            BackgroundColor3 = planetColors[i],
-            BorderSizePixel = 0,
-        }, orbit)
+        local planet = Instance.new("Part")
+        planet.Name = "Planet" .. i
+        planet.Shape = Enum.PartType.Ball
+        planet.Size = Vector3.new(0.55, 0.55, 0.55)
+        planet.Anchored = true
+        planet.CanCollide = false
+        planet.Material = Enum.Material.Neon
+        planet.Color = PlanetColors[i]
+        planet.Parent = model
 
-        round(planet, 20)
-        outline(planet, 1, 0.35)
         planets[i] = planet
     end
 
-    local ring = make("Frame", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(92, 72),
-        BackgroundTransparency = 1,
-    }, orbit)
-
-    round(ring, 40)
-    outline(ring, 1, 0.55)
-
-    local fragmentArea = make("Frame", {
-        Position = UDim2.new(0, 10, 0, 151),
-        Size = UDim2.new(1, -20, 0, 105),
-        BackgroundTransparency = 1,
-        ClipsDescendants = true,
-    }, introPanel)
-
-    local fragments = {}
-
-    for i = 1, 321 do
-        local fragmentSize = math.random(2, 5)
-
-        local fragment = make("Frame", {
-            Name = "Fragment" .. i,
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(math.random(), math.random()),
-            Size = UDim2.fromOffset(fragmentSize, fragmentSize),
-            BackgroundColor3 =
-                i % 6 == 0 and COLORS.purple or COLORS.blue,
-            BorderSizePixel = 0,
-        }, fragmentArea)
-
-        round(fragment, 4)
-        fragments[i] = fragment
-    end
-
-    local progressBack = make("Frame", {
-        Position = UDim2.new(0, 14, 1, -43),
-        Size = UDim2.new(1, -28, 0, 5),
-        BackgroundColor3 = COLORS.panelAlt,
-        BorderSizePixel = 0,
-    }, introPanel)
-
-    round(progressBack, 4)
-
-    local progress = make("Frame", {
-        Size = UDim2.new(0, 0, 1, 0),
-        BackgroundColor3 = COLORS.blue,
-        BorderSizePixel = 0,
-    }, progressBack)
-
-    round(progress, 4)
-
-    local fragmentCount = make("TextLabel", {
-        Position = UDim2.new(0, 0, 1, -32),
-        Size = UDim2.new(1, 0, 0, 16),
-        BackgroundTransparency = 1,
-        Text = "0 / 321",
-        TextColor3 = COLORS.muted,
-        TextSize = 10,
-        Font = Enum.Font.Code,
-    }, introPanel)
-
-    local tapIn = make("TextButton", {
-        Name = "TapIn",
-        AnchorPoint = Vector2.new(0.5, 1),
-        Position = UDim2.new(0.5, 0, 1, -50),
-        Size = UDim2.new(0.7, 0, 0, 40),
-        BackgroundColor3 = COLORS.panelAlt,
-        BorderSizePixel = 0,
-        Text = "T A P   I N",
-        TextColor3 = COLORS.text,
-        TextSize = 14,
-        Font = Enum.Font.GothamBlack,
-        Visible = false,
-    }, introPanel)
-
-    round(tapIn, 7)
-    outline(tapIn, 1, 0.08)
-
-    ----------------------------------------------------------------------
-    -- MAIN WINDOW
-    ----------------------------------------------------------------------
-
-    local hub = make("Frame", {
-        Name = "MainHub",
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.51),
-        Size = UDim2.new(0.91, 0, 0.74, 0),
-        BackgroundColor3 = COLORS.panel,
-        BorderSizePixel = 0,
-        Visible = false,
-    }, gui)
-
-    make("UISizeConstraint", {
-        MinSize = Vector2.new(300, 370),
-        MaxSize = Vector2.new(640, 590),
-    }, hub)
-
-    round(hub, 11)
-    outline(hub, 1, 0.05)
-
-    local titleText = make("TextLabel", {
-        Position = UDim2.new(0, 12, 0, 7),
-        Size = UDim2.new(1, -92, 0, 28),
-        BackgroundTransparency = 1,
-        Text = titles[titleIndex].name,
-        TextColor3 = titles[titleIndex].color,
-        TextSize = 17,
-        Font = Enum.Font.GothamBlack,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-    }, hub)
-
-    local subtitle = make("TextLabel", {
-        Position = UDim2.new(0, 13, 0, 29),
-        Size = UDim2.new(1, -100, 0, 14),
-        BackgroundTransparency = 1,
-        Text = "CLIENT PANEL  /  EP-01",
-        TextColor3 = COLORS.muted,
-        TextSize = 8,
-        Font = Enum.Font.Code,
-        TextXAlignment = Enum.TextXAlignment.Left,
-    }, hub)
-
-    local minimizeButton = make("TextButton", {
-        Position = UDim2.new(1, -42, 0, 8),
-        Size = UDim2.fromOffset(30, 28),
-        BackgroundColor3 = COLORS.panelAlt,
-        BorderSizePixel = 0,
-        Text = "×",
-        TextColor3 = COLORS.text,
-        TextSize = 19,
-        Font = Enum.Font.GothamBold,
-    }, hub)
-
-    round(minimizeButton, 6)
-    outline(minimizeButton, 1, 0.25)
-
-    make("Frame", {
-        Position = UDim2.new(0, 10, 0, 43),
-        Size = UDim2.new(1, -20, 0, 1),
-        BackgroundColor3 = COLORS.panelAlt,
-        BorderSizePixel = 0,
-    }, hub)
-
-    local sidebar = make("Frame", {
-        Name = "Sidebar",
-        Position = UDim2.new(0, 10, 0, 51),
-        Size = UDim2.new(0, 102, 1, -85),
-        BackgroundColor3 = COLORS.background,
-        BorderSizePixel = 0,
-    }, hub)
-
-    round(sidebar, 7)
-    outline(sidebar, 1, 0.55)
-
-    make("UIPadding", {
-        PaddingTop = UDim.new(0, 7),
-        PaddingBottom = UDim.new(0, 7),
-        PaddingLeft = UDim.new(0, 6),
-        PaddingRight = UDim.new(0, 6),
-    }, sidebar)
-
-    addListLayout(sidebar, 6)
-
-    local pageHost = make("Frame", {
-        Name = "PageHost",
-        Position = UDim2.new(0, 120, 0, 51),
-        Size = UDim2.new(1, -130, 1, -85),
-        BackgroundColor3 = COLORS.background,
-        BorderSizePixel = 0,
-    }, hub)
-
-    round(pageHost, 7)
-    outline(pageHost, 1, 0.55)
-
-    local statusLine = make("TextLabel", {
-        Position = UDim2.new(0, 12, 1, -25),
-        Size = UDim2.new(1, -24, 0, 17),
-        BackgroundTransparency = 1,
-        Text = "Status: Ready",
-        TextColor3 = COLORS.muted,
-        TextSize = 9,
-        Font = Enum.Font.Code,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-    }, hub)
-
-    local mini = make("TextButton", {
-        Name = "EP_MiniIcon",
-        AnchorPoint = Vector2.new(0, 0.5),
-        Position = UDim2.new(0, 12, 0.56, 0),
-        Size = UDim2.fromOffset(42, 42),
-        BackgroundColor3 = COLORS.background,
-        BorderSizePixel = 0,
-        Text = "EP",
-        TextColor3 = COLORS.text,
-        TextSize = 13,
-        Font = Enum.Font.GothamBlack,
-        Visible = false,
-        ZIndex = 100,
-    }, gui)
-
-    round(mini, 10)
-    outline(mini, 2, 0.02)
-
-    local function setStatus(message)
-        statusLine.Text = "Status: " .. tostring(message)
-    end
-
-    local pages = {}
-    local navButtons = {}
-
-    local function makePage(name)
-        local page = make("ScrollingFrame", {
-            Name = name .. "Page",
-            Size = UDim2.fromScale(1, 1),
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0,
-            ScrollBarThickness = 3,
-            ScrollBarImageColor3 = COLORS.blue,
-            AutomaticCanvasSize = Enum.AutomaticSize.Y,
-            CanvasSize = UDim2.new(0, 0, 0, 0),
-            Visible = false,
-        }, pageHost)
-
-        make("UIPadding", {
-            PaddingTop = UDim.new(0, 8),
-            PaddingBottom = UDim.new(0, 8),
-            PaddingLeft = UDim.new(0, 8),
-            PaddingRight = UDim.new(0, 8),
-        }, page)
-
-        addListLayout(page, 7)
-        pages[name] = page
-
-        return page
-    end
-
-    local function addInfo(parent, text, height, color)
-        return textLabel(
-            parent,
-            text,
-            height or 42,
-            color or COLORS.muted,
-            11
-        )
-    end
-
-    local function showPage(name)
-        if not pages[name] then return end
-
-        for pageName, page in pairs(pages) do
-            page.Visible = pageName == name
-        end
-
-        for tabName, button in pairs(navButtons) do
-            button.BackgroundColor3 =
-                tabName == name and COLORS.panelHover or COLORS.panelAlt
-
-            button.TextColor3 =
-                tabName == name and COLORS.text or COLORS.muted
-        end
-
-        setStatus("Opened " .. name)
-    end
-
-    local function addTab(name, label, order)
-        local button = make("TextButton", {
-            Name = "Tab_" .. name,
-            LayoutOrder = order,
-            Size = UDim2.new(1, 0, 0, 35),
-            BackgroundColor3 = COLORS.panelAlt,
-            BorderSizePixel = 0,
-            Text = label,
-            TextColor3 = COLORS.muted,
-            TextSize = 10,
-            Font = Enum.Font.GothamBold,
-            TextWrapped = true,
-        }, sidebar)
-
-        round(button, 6)
-        outline(button, 1, 0.65)
-
-        navButtons[name] = button
-
-        bind(button.Activated, function()
-            showPage(name)
-        end)
-
-        return button
-    end
-
-    local homePage = makePage("Home")
-    local playerPage = makePage("Player")
-    local reanimatePage = makePage("Reanimate")
-    local movesetsPage = makePage("Movesets")
-    local modelsPage = makePage("Models")
-    local settingsPage = makePage("Settings")
-
-    addTab("Home", "HOME", 1)
-    addTab("Player", "PLAYER", 2)
-    addTab("Reanimate", "REANIMATE", 3)
-    addTab("Movesets", "MOVESETS", 4)
-    addTab("Models", "MODEL STORE", 5)
-    addTab("Settings", "SETTINGS", 6)
-
-    ----------------------------------------------------------------------
-    -- HOME
-    ----------------------------------------------------------------------
-
-    textLabel(homePage, "EPIC PLANETS", 26, COLORS.text, 16).Font =
-        Enum.Font.GothamBlack
-
-    addInfo(
-        homePage,
-        "A compact, mobile-friendly control panel. Use the left tabs to open each section.",
-        52
-    )
-
-    addInfo(homePage, "Player: " .. player.Name, 24, COLORS.text)
-    addInfo(homePage, "Place ID: " .. tostring(game.PlaceId), 22)
-
-    statusButton(homePage, "REFRESH MODULE LIST", function()
-        showPage("Movesets")
-        setStatus("Movesets opened. Tap REFRESH MODULES to scan files.")
-    end)
-
-    statusButton(homePage, "MINIMIZE TO EP ICON", function()
-        hub.Visible = false
-        mini.Visible = true
-        setStatus("Minimized to EP icon")
-    end)
-
-    ----------------------------------------------------------------------
-    -- PLAYER TOOLS
-    ----------------------------------------------------------------------
-
-    textLabel(playerPage, "PLAYER CONTROLS", 26, COLORS.text, 14).Font =
-        Enum.Font.GothamBold
-
-    addInfo(
-        playerPage,
-        "These are client-side movement changes. The game may override them.",
-        43
-    )
-
-    local speedEnabled = false
-    local jumpEnabled = false
-    local flyEnabled = false
-    local originalWalkSpeed = nil
-    local originalJumpPower = nil
-    local originalJumpHeight = nil
-    local flyVelocity = nil
-    local flyGyro = nil
-    local flyVertical = 0
-    local flyButton
-    local speedButton
-    local jumpButton
-
-    local function getCharacterParts()
-        local character = player.Character
-        if not character then return nil, nil end
-
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        local root = character:FindFirstChild("HumanoidRootPart")
-
-        return humanoid, root
-    end
-
-    local function setSpeed(enabled)
-        local humanoid = getCharacterParts()
-
-        if not humanoid then
-            speedEnabled = false
-            setStatus("Character/Humanoid not ready")
-            return
-        end
-
-        if enabled then
-            originalWalkSpeed = humanoid.WalkSpeed
-            humanoid.WalkSpeed = 32
-            speedEnabled = true
-        else
-            if originalWalkSpeed then
-                humanoid.WalkSpeed = originalWalkSpeed
-            end
-
-            speedEnabled = false
-        end
-
-        speedButton.Text =
-            "Speed: " .. (speedEnabled and "ON (32)" or "OFF")
-
-        setStatus(speedEnabled and "Speed enabled" or "Speed restored")
-    end
-
-    local function setJump(enabled)
-        local humanoid = getCharacterParts()
-
-        if not humanoid then
-            jumpEnabled = false
-            setStatus("Character/Humanoid not ready")
-            return
-        end
-
-        if enabled then
-            originalJumpPower = humanoid.JumpPower
-            originalJumpHeight = humanoid.JumpHeight
-
-            if humanoid.UseJumpPower then
-                humanoid.JumpPower = 100
-            else
-                humanoid.JumpHeight = 50
-            end
-
-            jumpEnabled = true
-        else
-            if humanoid.UseJumpPower then
-                if originalJumpPower then
-                    humanoid.JumpPower = originalJumpPower
-                end
-            elseif originalJumpHeight then
-                humanoid.JumpHeight = originalJumpHeight
-            end
-
-            jumpEnabled = false
-        end
-
-        jumpButton.Text =
-            "High Jump: " .. (jumpEnabled and "ON" or "OFF")
-
-        setStatus(jumpEnabled and "High jump enabled" or "Jump restored")
-    end
-
-    local function setFly(enabled)
-        local humanoid, root = getCharacterParts()
-
-        if enabled and (not humanoid or not root) then
-            flyEnabled = false
-            setStatus("Character/HumanoidRootPart not ready")
-            return
-        end
-
-        if enabled then
-            if flyVelocity then
-                pcall(function()
-                    flyVelocity:Destroy()
-                end)
-            end
-
-            if flyGyro then
-                pcall(function()
-                    flyGyro:Destroy()
-                end)
-            end
-
-            flyVelocity = make("BodyVelocity", {
-                Name = "EP_FlyVelocity",
-                MaxForce = Vector3.new(
-                    1000000000,
-                    1000000000,
-                    1000000000
-                ),
-                P = 12000,
-                Velocity = Vector3.zero,
-            }, root)
-
-            flyGyro = make("BodyGyro", {
-                Name = "EP_FlyGyro",
-                MaxTorque = Vector3.new(
-                    1000000000,
-                    1000000000,
-                    1000000000
-                ),
-                P = 9000,
-                CFrame = root.CFrame,
-            }, root)
-
-            humanoid.AutoRotate = false
-            flyVertical = 0
-            flyEnabled = true
-        else
-            flyEnabled = false
-            flyVertical = 0
-
-            if flyVelocity then
-                pcall(function()
-                    flyVelocity:Destroy()
-                end)
-            end
-
-            if flyGyro then
-                pcall(function()
-                    flyGyro:Destroy()
-                end)
-            end
-
-            flyVelocity = nil
-            flyGyro = nil
-
-            if humanoid then
-                humanoid.AutoRotate = true
-            end
-        end
-
-        flyButton.Text = "Fly: " .. (flyEnabled and "ON" or "OFF")
-
-        setStatus(
-            flyEnabled
-                and "Fly enabled. Use joystick + UP/DOWN."
-                or "Fly disabled"
-        )
-    end
-
-    flyButton = statusButton(playerPage, "Fly: OFF", function()
-        setFly(not flyEnabled)
-    end)
-
-    speedButton = statusButton(playerPage, "Speed: OFF", function()
-        setSpeed(not speedEnabled)
-    end)
-
-    jumpButton = statusButton(playerPage, "High Jump: OFF", function()
-        setJump(not jumpEnabled)
-    end)
-
-    local verticalRow = make("Frame", {
-        Size = UDim2.new(1, -4, 0, 42),
-        BackgroundTransparency = 1,
-    }, playerPage)
-
-    local upButton = make("TextButton", {
-        Position = UDim2.new(0, 0, 0, 0),
-        Size = UDim2.new(0.49, 0, 1, 0),
-        BackgroundColor3 = COLORS.panelAlt,
-        BorderSizePixel = 0,
-        Text = "HOLD UP",
-        TextColor3 = COLORS.text,
-        TextSize = 11,
-        Font = Enum.Font.GothamBold,
-    }, verticalRow)
-
-    round(upButton, 6)
-    outline(upButton, 1, 0.4)
-
-    local downButton = make("TextButton", {
-        Position = UDim2.new(0.51, 0, 0, 0),
-        Size = UDim2.new(0.49, 0, 1, 0),
-        BackgroundColor3 = COLORS.panelAlt,
-        BorderSizePixel = 0,
-        Text = "HOLD DOWN",
-        TextColor3 = COLORS.text,
-        TextSize = 11,
-        Font = Enum.Font.GothamBold,
-    }, verticalRow)
-
-    round(downButton, 6)
-    outline(downButton, 1, 0.4)
-
-    local function holdVertical(button, value)
-        bind(button.InputBegan, function(input)
-            if input.UserInputType == Enum.UserInputType.Touch
-                or input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-                if flyEnabled then
-                    flyVertical = value
-                else
-                    setStatus("Ative Fly primeiro")
-                end
-            end
-        end)
-
-        bind(button.InputEnded, function(input)
-            if input.UserInputType == Enum.UserInputType.Touch
-                or input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-                if flyVertical == value then
-                    flyVertical = 0
-                end
-            end
-        end)
-    end
-
-    holdVertical(upButton, 1)
-    holdVertical(downButton, -1)
-
-    addInfo(
-        playerPage,
-        "Tip: activate Fly, then steer with the Roblox joystick. Hold UP or DOWN for altitude.",
-        44
-    )
-
-    ----------------------------------------------------------------------
-    -- MOVESETS / MODULES
-    ----------------------------------------------------------------------
-
-    textLabel(movesetsPage, "MOVESETS / MODULES", 26, COLORS.text, 14).Font =
-        Enum.Font.GothamBold
-
-    addInfo(
-        movesetsPage,
-        "Local Lua files are read from Delta's file manager folder:",
-        36
-    )
-
-    addInfo(movesetsPage, MODULES, 26, COLORS.text)
-
-    local moduleList = make("Frame", {
-        Name = "ModuleList",
-        Size = UDim2.new(1, -4, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-    }, movesetsPage)
-
-    addListLayout(moduleList, 6)
-
-    local function runLocalModule(path)
-        local readOK, source = executorCall("readfile", path)
-
-        if not readOK or type(source) ~= "string" then
-            setStatus("Could not read " .. tostring(path))
-            return
-        end
-
-        local loadFn = findExecutorFunction("loadstring")
-
-        if not loadFn then
-            setStatus("This Delta environment has no loadstring")
-            return
-        end
-
-        local compileOK, chunk = pcall(loadFn, source)
-
-        if not compileOK or type(chunk) ~= "function" then
-            setStatus("Lua compile error: " .. tostring(chunk))
-            return
-        end
-
-        local runOK, runError = pcall(chunk)
-
-        if not runOK then
-            setStatus("Module error: " .. tostring(runError))
-            return
-        end
-
-        setStatus("Module executed: " .. tostring(path):match("[^/\\]+$"))
-    end
-
-    local function refreshModules()
-        for _, child in ipairs(moduleList:GetChildren()) do
-            if child:IsA("GuiObject") then
-                child:Destroy()
-            end
-        end
-
-        local listFn = findExecutorFunction("listfiles")
-
-        if not listFn then
-            addInfo(
-                moduleList,
-                "Delta does not expose listfiles in this environment.",
-                42,
-                COLORS.red
-            )
-            setStatus("listfiles API unavailable")
-            return
-        end
-
-        local listOK, files = pcall(listFn, MODULES)
-
-        if not listOK or type(files) ~= "table" then
-            addInfo(
-                moduleList,
-                "Folder could not be scanned. Check the path in Delta's file manager.",
-                48,
-                COLORS.red
-            )
-            setStatus("Could not scan Modules folder")
-            return
-        end
-
-        local found = 0
-
-        for _, path in ipairs(files) do
-            if type(path) == "string"
-                and string.lower(path):sub(-4) == ".lua" then
-
-                found += 1
-
-                local filePath = path
-                local shortName = path:match("[^/\\]+$") or path
-
-                statusButton(moduleList, "RUN  " .. shortName, function()
-                    runLocalModule(filePath)
-                end, 38)
-            end
-        end
-
-        if found == 0 then
-            addInfo(
-                moduleList,
-                "No .lua files found yet. Put your modules in the folder above, then refresh.",
-                54
-            )
-            setStatus("No Lua modules found")
-        else
-            setStatus("Found " .. tostring(found) .. " Lua module(s)")
-        end
-    end
-
-    statusButton(movesetsPage, "REFRESH MODULES", refreshModules)
-
-    ----------------------------------------------------------------------
-    -- REANIMATION
-    ----------------------------------------------------------------------
-
-    textLabel(reanimatePage, "REANIMATION", 26, COLORS.text, 14).Font =
-        Enum.Font.GothamBold
-
-    addInfo(
-        reanimatePage,
-        "This interface does not bundle Uhhhhhh's reanimation engine. To connect your own compatible module, place LimbReanimation.lua in the Modules folder.",
-        78
-    )
-
-    addInfo(reanimatePage, "Module path:", 22)
-    addInfo(reanimatePage, MODULES .. "/LimbReanimation.lua", 34, COLORS.text)
-
-    statusButton(reanimatePage, "LOAD LIMB REANIMATION MODULE", function()
-        local path = MODULES .. "/LimbReanimation.lua"
-        local ok, result = executorCall("isfile", path)
-
-        if not ok or result ~= true then
-            setStatus("LimbReanimation.lua not found in Modules")
-            return
-        end
-
-        runLocalModule(path)
-    end)
-
-    statusButton(reanimatePage, "OPEN MOVESETS", function()
-        showPage("Movesets")
-        refreshModules()
-    end)
-
-    ----------------------------------------------------------------------
-    -- MODEL STORE
-    ----------------------------------------------------------------------
-
-    textLabel(modelsPage, "MODEL STORE", 26, COLORS.text, 14).Font =
-        Enum.Font.GothamBold
-
-    addInfo(
-        modelsPage,
-        "Install small client-side visual models. They are local to your client.",
-        45
-    )
-
-    local installedModels = {}
-    ENV.__EPIC_PLANETS_MODELS = {}
-
-    local function removeAllModels()
-        for _, entry in ipairs(installedModels) do
-            if entry.model and entry.model.Parent then
-                pcall(function()
-                    entry.model:Destroy()
-                end)
-            end
-        end
-
-        for _, model in ipairs(ENV.__EPIC_PLANETS_MODELS or {}) do
-            if typeof(model) == "Instance" and model.Parent then
-                pcall(function()
-                    model:Destroy()
-                end)
-            end
-        end
-
-        for i = #installedModels, 1, -1 do
-            installedModels[i] = nil
-        end
-
-        ENV.__EPIC_PLANETS_MODELS = {}
-        setStatus("Removed all EPIC PLANETS models")
-    end
-
-    local function createOrbitalCore()
-        local character = player.Character
-        local root = character
-            and character:FindFirstChild("HumanoidRootPart")
-
-        if not root then
-            setStatus("Character root not ready")
-            return
-        end
-
-        local model = Instance.new("Model")
-        model.Name = "EP_OrbitalCore"
-        model.Parent = World
-
-        local centerPart = Instance.new("Part")
-        centerPart.Name = "Core"
-        centerPart.Shape = Enum.PartType.Ball
-        centerPart.Size = Vector3.new(1.7, 1.7, 1.7)
-        centerPart.Anchored = true
-        centerPart.CanCollide = false
-        centerPart.Material = Enum.Material.Neon
-        centerPart.Color = COLORS.blue
-        centerPart.Parent = model
-
-        local orbitParts = {}
-
-        for i = 1, 4 do
-            local part = Instance.new("Part")
-            part.Name = "Planet" .. i
-            part.Shape = Enum.PartType.Ball
-            part.Size = Vector3.new(0.55, 0.55, 0.55)
-            part.Anchored = true
-            part.CanCollide = false
-            part.Material = Enum.Material.Neon
-            part.Color = planetColors[i]
-            part.Parent = model
-            orbitParts[i] = part
-        end
-
-        model.PrimaryPart = centerPart
-
-        table.insert(installedModels, {
-            model = model,
-            center = centerPart,
-            planets = orbitParts,
-        })
-
-        table.insert(ENV.__EPIC_PLANETS_MODELS, model)
-
-        setStatus("Orbital Core installed")
-    end
-
-    statusButton(modelsPage, "INSTALL ORBITAL CORE", createOrbitalCore)
-    statusButton(modelsPage, "REMOVE ALL INSTALLED MODELS", removeAllModels)
-
-    local xesterURL =
-        "https://scriptblox.com/raw/Universal-Script-Xester-V1-46145"
-
-    statusButton(modelsPage, "COPY XESTER V1 SOURCE URL", function()
-        local clipboard =
-            findExecutorFunction("setclipboard")
-            or findExecutorFunction("toclipboard")
-
-        if not clipboard then
-            setStatus("Clipboard API unavailable. URL: " .. xesterURL)
-            return
-        end
-
-        local ok, err = pcall(clipboard, xesterURL)
-
-        if ok then
-            setStatus("Xester V1 URL copied; source was not executed")
-        else
-            setStatus("Copy failed: " .. tostring(err))
-        end
-    end)
-
-    ----------------------------------------------------------------------
-    -- SETTINGS
-    ----------------------------------------------------------------------
-
-    textLabel(settingsPage, "SETTINGS", 26, COLORS.text, 14).Font =
-        Enum.Font.GothamBold
-
-    addInfo(
-        settingsPage,
-        "The title is randomized on launch. This button draws another title immediately.",
-        48
-    )
-
-    local function chooseRandomTitle()
-        local oldIndex = titleIndex
-
-        if #titles > 1 then
-            repeat
-                titleIndex = math.random(1, #titles)
-            until titleIndex ~= oldIndex
-        end
-
-        ENV.__EPIC_PLANETS_LAST_TITLE = titleIndex
-
-        local selected = titles[titleIndex]
-        titleText.Text = selected.name
-        titleText.TextColor3 = selected.color
-        introTitle.Text = selected.name
-        introTitle.TextColor3 = selected.color
-
-        setStatus("Random title: " .. selected.name)
-    end
-
-    statusButton(settingsPage, "RANDOMIZE SCRIPT TITLE", chooseRandomTitle)
-
-    statusButton(settingsPage, "REFRESH MOVESETS", function()
-        showPage("Movesets")
-        refreshModules()
-    end)
-
-    statusButton(settingsPage, "MINIMIZE TO EP ICON", function()
-        hub.Visible = false
-        mini.Visible = true
-        setStatus("Minimized to EP icon")
-    end)
-
-    addInfo(
-        settingsPage,
-        "Theme: dark panels with a smooth rainbow border. Intro background disappears when you tap in.",
-        54
-    )
-
-    ----------------------------------------------------------------------
-    -- EVENTS / INTERACTION
-    ----------------------------------------------------------------------
-
-    bind(tapIn.Activated, function()
-        introStatus.Text = "SYSTEMS READY"
-
-        tween(introPanel, 0.22, {
-            BackgroundTransparency = 1,
-            Position = UDim2.fromScale(0.5, 0.48),
-        })
-
-        task.wait(0.23)
-
-        intro.Visible = false
-        hub.Visible = true
-        hub.Size = UDim2.new(0.84, 0, 0.68, 0)
-        hub.BackgroundTransparency = 1
-
-        tween(hub, 0.28, {
-            Size = UDim2.new(0.91, 0, 0.74, 0),
-            BackgroundTransparency = 0,
-        }, Enum.EasingStyle.Back)
-
-        showPage("Home")
-        setStatus("Ready")
-    end)
-
-    bind(minimizeButton.Activated, function()
-        hub.Visible = false
-        mini.Visible = true
-        setStatus("Minimized to EP icon")
-    end)
-
-    bind(mini.Activated, function()
-        mini.Visible = false
-        hub.Visible = true
-        setStatus("Window restored")
-    end)
-
-    ----------------------------------------------------------------------
-    -- DRAG WINDOW
-    ----------------------------------------------------------------------
-
-    local dragging = false
-    local dragStart = nil
-    local startPosition = nil
-
-    bind(titleText.InputBegan, function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-            dragging = true
-            dragStart = input.Position
-            startPosition = hub.Position
-
-            bind(input.Changed, function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    bind(UserInputService.InputChanged, function(input)
-        if not dragging then return end
-
-        if input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseMovement then
-
-            local delta = input.Position - dragStart
-
-            hub.Position = UDim2.new(
-                startPosition.X.Scale,
-                startPosition.X.Offset + delta.X,
-                startPosition.Y.Scale,
-                startPosition.Y.Offset + delta.Y
-            )
-        end
-    end)
-
-    ----------------------------------------------------------------------
-    -- INTRO ANIMATION
-    ----------------------------------------------------------------------
-
-    task.spawn(function()
-        local total = #fragments
-
-        for i, fragment in ipairs(fragments) do
-            if not gui.Parent then return end
-
-            local x = ((i - 1) % 29) / 28
-            local y = math.floor((i - 1) / 29) / 11
-
-            tween(fragment, 0.38 + math.random() * 0.42, {
-                Position = UDim2.fromScale(x, math.clamp(y, 0, 1)),
-            }, Enum.EasingStyle.Quint)
-
-            if i % 5 == 0 or i == total then
-                tween(progress, 0.12, {
-                    Size = UDim2.new(i / total, 0, 1, 0),
-                })
-
-                fragmentCount.Text =
-                    tostring(i) .. " / " .. tostring(total)
-            end
-
-            task.wait(0.002)
-        end
-
-        task.wait(0.55)
-        introStatus.Text = "ALL FRAGMENTS CONNECTED"
-
-        for _, fragment in ipairs(fragments) do
-            fragment.BackgroundColor3 = COLORS.text
-        end
-
-        --------------------------------------------------------------
-        -- AUDIO STARTS RIGHT BEFORE THE FLASH.
-        --------------------------------------------------------------
-
-        if flashSound and flashSound.Parent then
+    model.PrimaryPart = center
+
+    table.insert(installedModels, {
+        model = model,
+        center = center,
+        planets = planets,
+    })
+
+    setStatus("Orbital Core installed")
+end
+
+local function removeModels()
+    for _, entry in ipairs(installedModels) do
+        if typeof(entry) == "Instance" then
             pcall(function()
-                flashSound:Stop()
-                flashSound.TimePosition = 0
-                flashSound:Play()
+                entry:Destroy()
+            end)
+        elseif type(entry) == "table" and entry.model then
+            pcall(function()
+                entry.model:Destroy()
             end)
         end
+    end
 
-        -- FLASH START
-        tween(introPanel, 0.08, {
-            BackgroundColor3 = Color3.fromRGB(90, 95, 115),
-        })
+    table.clear(installedModels)
+    setStatus("Removed installed models")
+end
 
-        task.wait(0.1)
+UI.Button(ModelsPage, "INSTALL ORBITAL CORE", createOrbitalCore)
+UI.Button(ModelsPage, "REMOVE INSTALLED MODELS", removeModels)
 
-        tween(introPanel, 0.16, {
-            BackgroundColor3 = COLORS.panel,
-        })
+----------------------------------------------------------------
+-- SETTINGS
+----------------------------------------------------------------
 
-        for _, fragment in ipairs(fragments) do
-            tween(fragment, 1.45, {
-                BackgroundTransparency = 1,
-                Size = UDim2.fromOffset(0, 0),
-            }, Enum.EasingStyle.Sine)
+UI.Label(SettingsPage, "SETTINGS", 27, 14, C.Text).Font =
+    Enum.Font.GothamBold
+
+info(
+    SettingsPage,
+    "Configure the internal features of EPIC PLANETS.",
+    36
+)
+
+UI.Button(SettingsPage, "RANDOMIZE TITLE", function()
+    local oldTitle = Title
+
+    repeat
+        Title = BuiltinModules.Titles[
+            math.random(1, #BuiltinModules.Titles)
+        ]
+    until #BuiltinModules.Titles == 1 or Title ~= oldTitle
+
+    Header.Text = Title
+    IntroTitle.Text = Title
+
+    setStatus("Title changed: " .. Title)
+end)
+
+UI.Button(SettingsPage, "TOGGLE FLASH AUDIO", function(button)
+    BuiltinModules.Settings.FlashAudio =
+        not BuiltinModules.Settings.FlashAudio
+
+    button.Text = BuiltinModules.Settings.FlashAudio
+        and "FLASH AUDIO: ON"
+        or "FLASH AUDIO: OFF"
+
+    setStatus("Flash audio updated")
+end)
+
+UI.Button(SettingsPage, "PLAY TEST AUDIO", function()
+    BuiltinModules.Audio.PlayFlash()
+    setStatus("Audio test requested")
+end)
+
+UI.Button(SettingsPage, "MINIMIZE WINDOW", function()
+    Hub.Visible = false
+    Mini.Visible = true
+    setStatus("Minimized")
+end)
+
+info(
+    SettingsPage,
+    "The MP3 is prepared locally before the intro flash.",
+    38
+)
+
+----------------------------------------------------------------
+-- WINDOW CONTROLS
+----------------------------------------------------------------
+
+connect(Minimize.Activated, function()
+    Hub.Visible = false
+    Mini.Visible = true
+end)
+
+connect(Mini.Activated, function()
+    Mini.Visible = false
+    Hub.Visible = true
+end)
+
+connect(TapIn.Activated, function()
+    IntroStatus.Text = "SYSTEMS READY"
+
+    tween(IntroPanel, 0.22, {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromScale(0.5, 0.48),
+    })
+
+    task.wait(0.23)
+
+    Intro.Visible = false
+    Hub.Visible = true
+    Hub.Size = UDim2.new(0.84, 0, 0.68, 0)
+    Hub.BackgroundTransparency = 1
+
+    tween(Hub, 0.28, {
+        Size = UDim2.new(0.91, 0, 0.74, 0),
+        BackgroundTransparency = 0,
+    }, Enum.EasingStyle.Back)
+
+    showPage("Home")
+end)
+
+----------------------------------------------------------------
+-- DRAG WINDOW
+----------------------------------------------------------------
+
+local dragging = false
+local dragStart
+local startPosition
+
+connect(Header.InputBegan, function(input)
+    if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+        dragging = true
+        dragStart = input.Position
+        startPosition = Hub.Position
+    end
+end)
+
+connect(UserInputService.InputChanged, function(input)
+    if not dragging or not dragStart or not startPosition then
+        return
+    end
+
+    if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseMovement then
+
+        local delta = input.Position - dragStart
+
+        Hub.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end
+end)
+
+connect(UserInputService.InputEnded, function(input)
+    if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+        dragging = false
+    end
+end)
+
+----------------------------------------------------------------
+-- BUILTINMODULES: ANIMATIONS
+----------------------------------------------------------------
+
+BuiltinModules.Animations = {}
+
+function BuiltinModules.Animations.PlayIntro()
+    local total = #Fragments
+
+    for i, fragment in ipairs(Fragments) do
+        if not GUI.Parent then
+            return
         end
 
-        tween(progress, 1.45, {
+        local x = ((i - 1) % 29) / 28
+        local y = math.floor((i - 1) / 29) / 11
+
+        tween(fragment, 0.38 + math.random() * 0.42, {
+            Position = UDim2.fromScale(x, math.clamp(y, 0, 1)),
+        }, Enum.EasingStyle.Quint)
+
+        if i % 5 == 0 or i == total then
+            tween(Progress, 0.12, {
+                Size = UDim2.new(i / total, 0, 1, 0),
+            })
+
+            FragmentCount.Text = i .. " / " .. total
+        end
+
+        task.wait(0.002)
+    end
+
+    task.wait(0.55)
+
+    IntroStatus.Text = "ALL FRAGMENTS CONNECTED"
+
+    for _, fragment in ipairs(Fragments) do
+        fragment.BackgroundColor3 = C.Text
+    end
+
+    ------------------------------------------------------------
+    -- AUDIO STARTS AT THE FLASH.
+    ------------------------------------------------------------
+
+    BuiltinModules.Audio.PlayFlash()
+
+    tween(IntroPanel, 0.08, {
+        BackgroundColor3 = Color3.fromRGB(90, 95, 115),
+    })
+
+    task.wait(0.1)
+
+    tween(IntroPanel, 0.16, {
+        BackgroundColor3 = C.Panel,
+    })
+
+    for _, fragment in ipairs(Fragments) do
+        tween(fragment, 1.45, {
             BackgroundTransparency = 1,
-        })
+            Size = UDim2.fromOffset(0, 0),
+        }, Enum.EasingStyle.Sine)
+    end
 
-        tween(fragmentCount, 1.45, {
-            TextTransparency = 1,
-        })
+    tween(Progress, 1.45, {
+        BackgroundTransparency = 1,
+    })
 
-        task.wait(1.55)
+    tween(FragmentCount, 1.45, {
+        TextTransparency = 1,
+    })
 
-        if not gui.Parent then return end
+    task.wait(1.55)
 
-        fragmentArea.Visible = false
-        introStatus.Text = "ALL SYSTEMS READY"
-        tapIn.Visible = true
-        tapIn.BackgroundTransparency = 1
-        tapIn.TextTransparency = 1
+    if not GUI.Parent then
+        return
+    end
 
-        tween(tapIn, 0.45, {
-            BackgroundTransparency = 0,
-            TextTransparency = 0,
-        })
-    end)
+    FragmentArea.Visible = false
+    IntroStatus.Text = "ALL SYSTEMS READY"
+    TapIn.Visible = true
+    TapIn.BackgroundTransparency = 1
+    TapIn.TextTransparency = 1
 
-    ----------------------------------------------------------------------
-    -- RAINBOW AURA / ORBITS / FLY / LOCAL MODELS
-    ----------------------------------------------------------------------
+    tween(TapIn, 0.45, {
+        BackgroundTransparency = 0,
+        TextTransparency = 0,
+    })
+end
 
-    ENV.__EPIC_PLANETS_MODELS = ENV.__EPIC_PLANETS_MODELS or {}
+----------------------------------------------------------------
+-- RENDER LOOP
+----------------------------------------------------------------
 
-    bind(RunService.RenderStepped, function()
-        local t = os.clock()
-        local hue = (t * 0.12) % 1
+local rainbowObjects = {}
 
-        for _, stroke in ipairs(rainbowStrokes) do
+for _, object in ipairs(GUI:GetDescendants()) do
+    if object:IsA("UIStroke") then
+        table.insert(rainbowObjects, object)
+    end
+end
+
+connect(RunService.RenderStepped, function()
+    local now = os.clock()
+    local hue = (now * 0.12) % 1
+
+    if BuiltinModules.Settings.Rainbow then
+        for _, stroke in ipairs(rainbowObjects) do
             if stroke and stroke.Parent then
                 stroke.Color = Color3.fromHSV(
                     (hue + 0.025) % 1,
@@ -1571,126 +1574,139 @@ local success, fatalError = pcall(function()
                 )
             end
         end
+    end
 
-        if intro.Visible then
-            for i, planet in ipairs(planets) do
-                local angle =
-                    t * (0.75 + i * 0.12) + (i - 1) * math.pi / 2
+    if Intro.Visible then
+        for i, planet in ipairs(Planets) do
+            local angle =
+                now * (0.75 + i * 0.12)
+                + (i - 1) * math.pi / 2
 
-                planet.Position = UDim2.fromOffset(
-                    75 + math.cos(angle) * 42,
-                    54 + math.sin(angle) * 32
+            planet.Position = UDim2.fromOffset(
+                75 + math.cos(angle) * 42,
+                54 + math.sin(angle) * 32
+            )
+        end
+
+        Core.Rotation = (now * 35) % 360
+    end
+
+    if flyEnabled then
+        local humanoid, root = getCharacterParts()
+
+        if not humanoid or not root
+            or not flyVelocity or not flyVelocity.Parent then
+
+            setFly(false)
+        else
+            local direction = humanoid.MoveDirection
+
+            flyVelocity.Velocity =
+                direction * 48 + Vector3.new(0, vertical * 38, 0)
+
+            local camera = Workspace.CurrentCamera
+
+            if camera and flyGyro and flyGyro.Parent then
+                flyGyro.CFrame = CFrame.new(
+                    root.Position,
+                    root.Position + camera.CFrame.LookVector
                 )
             end
-
-            core.Rotation = (t * 35) % 360
         end
+    end
 
-        if flyEnabled then
-            local humanoid, root = getCharacterParts()
+    for i = #installedModels, 1, -1 do
+        local entry = installedModels[i]
 
-            if not humanoid or not root
-                or not flyVelocity or not flyVelocity.Parent then
+        if type(entry) ~= "table"
+            or not entry.model
+            or not entry.model.Parent then
 
-                setFly(false)
-            else
-                local direction = humanoid.MoveDirection
+            table.remove(installedModels, i)
+        else
+            local character = Player.Character
+            local root = character
+                and character:FindFirstChild("HumanoidRootPart")
 
-                flyVelocity.Velocity =
-                    direction * 48 + Vector3.new(0, flyVertical * 38, 0)
+            if root and entry.center and entry.center.Parent then
+                local base = root.CFrame * CFrame.new(0, 4.5, -6)
 
-                local camera = World.CurrentCamera
+                entry.center.CFrame = base
 
-                if camera and flyGyro and flyGyro.Parent then
-                    flyGyro.CFrame = CFrame.new(
-                        root.Position,
-                        root.Position + camera.CFrame.LookVector
+                for index, planet in ipairs(entry.planets) do
+                    local angle =
+                        now * 1.1 + (index - 1) * math.pi / 2
+
+                    local offset = Vector3.new(
+                        math.cos(angle) * 2.7,
+                        math.sin(angle * 1.4) * 0.6,
+                        math.sin(angle) * 2.7
                     )
+
+                    planet.CFrame = CFrame.new(base.Position + offset)
                 end
             end
         end
-
-        for i = #installedModels, 1, -1 do
-            local entry = installedModels[i]
-
-            if not entry.model or not entry.model.Parent then
-                table.remove(installedModels, i)
-            else
-                local character = player.Character
-                local root = character
-                    and character:FindFirstChild("HumanoidRootPart")
-
-                if root and entry.center and entry.center.Parent then
-                    local base = root.CFrame * CFrame.new(0, 4.5, -6)
-                    entry.center.CFrame = base
-
-                    for index, planet in ipairs(entry.planets) do
-                        local angle = t * 1.1 + (index - 1) * math.pi / 2
-
-                        local offset = Vector3.new(
-                            math.cos(angle) * 2.7,
-                            math.sin(angle * 1.4) * 0.6,
-                            math.sin(angle) * 2.7
-                        )
-
-                        planet.CFrame = CFrame.new(base.Position + offset)
-                    end
-                end
-            end
-        end
-    end)
-
-    bind(player.CharacterAdded, function()
-        task.wait(0.8)
-
-        local humanoid = getCharacterParts()
-
-        if humanoid then
-            if speedEnabled then
-                originalWalkSpeed = humanoid.WalkSpeed
-                humanoid.WalkSpeed = 32
-            end
-
-            if jumpEnabled then
-                originalJumpPower = humanoid.JumpPower
-                originalJumpHeight = humanoid.JumpHeight
-
-                if humanoid.UseJumpPower then
-                    humanoid.JumpPower = 100
-                else
-                    humanoid.JumpHeight = 50
-                end
-            end
-        end
-
-        if flyEnabled then
-            setFly(false)
-        end
-    end)
-
-    showPage("Home")
-    setStatus("Loading intro")
-
-    print("[EPIC PLANETS] GUI loaded.")
-    print("[EPIC PLANETS] Modules folder: " .. MODULES)
-
-    if flashSound then
-        print("[EPIC PLANETS AUDIO] Ready to play on flash.")
-    else
-        warn("[EPIC PLANETS AUDIO] GUI loaded without audio.")
     end
 end)
 
-if not success then
-    warn("[EPIC PLANETS] Fatal error: " .. tostring(fatalError))
+----------------------------------------------------------------
+-- CHARACTER RESPAWN
+----------------------------------------------------------------
 
-    ENV.__EPIC_PLANETS_RUNNING = nil
+connect(Player.CharacterAdded, function()
+    task.wait(0.8)
 
-    if ENV.__EPIC_PLANETS_GUI then
-        pcall(function()
-            ENV.__EPIC_PLANETS_GUI:Destroy()
-        end)
+    local humanoid = getCharacterParts()
+
+    if humanoid then
+        if speedEnabled then
+            oldSpeed = humanoid.WalkSpeed
+            humanoid.WalkSpeed = 32
+        end
+
+        if jumpEnabled then
+            oldJumpPower = humanoid.JumpPower
+            oldJumpHeight = humanoid.JumpHeight
+
+            if humanoid.UseJumpPower then
+                humanoid.JumpPower = 100
+            else
+                humanoid.JumpHeight = 50
+            end
+        end
     end
 
-    ENV.__EPIC_PLANETS_GUI = nil
+    if flyEnabled then
+        setFly(false)
+    end
+end)
+
+----------------------------------------------------------------
+-- INITIALIZE
+----------------------------------------------------------------
+
+BuiltinModules.Initialized = true
+ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
+
+showPage("Home")
+setStatus("Loading intro")
+
+print("[EPIC PLANETS] Main.lua loaded.")
+print("[EPIC PLANETS] BuiltinModules " .. BuiltinModules.Version)
+
+if flashSound then
+    print("[EPIC PLANETS AUDIO] Ready for intro flash.")
+else
+    warn("[EPIC PLANETS AUDIO] Audio unavailable; interface will still load.")
 end
+
+task.spawn(function()
+    local ok, err = pcall(function()
+        BuiltinModules.Animations.PlayIntro()
+    end)
+
+    if not ok then
+        warn("[EPIC PLANETS] Intro error: " .. tostring(err))
+    end
+end)
