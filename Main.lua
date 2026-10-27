@@ -38,6 +38,16 @@ if ENV.__EPIC_PLANETS_FLASH_SOUND then
     end)
 end
 
+if type(ENV.__EPIC_PLANETS_PERSONAL_AUDIO_SOUNDS) == "table" then
+    for _, oldSound in pairs(ENV.__EPIC_PLANETS_PERSONAL_AUDIO_SOUNDS) do
+        pcall(function()
+            oldSound:Stop()
+            oldSound:Destroy()
+        end)
+    end
+end
+ENV.__EPIC_PLANETS_PERSONAL_AUDIO_SOUNDS = {}
+
 if type(ENV.__EPIC_PLANETS_MODELS) == "table" then
     for _, model in ipairs(ENV.__EPIC_PLANETS_MODELS) do
         pcall(function()
@@ -854,6 +864,7 @@ local BuiltinPage = makePage("BuiltinModules")
 local MovesetsPage = makePage("Movesets")
 local ModelsPage = makePage("Models")
 local SettingsPage = makePage("Settings")
+local PersonalizationPage = makePage("Personalization")
 
 addTab("Home", "HOME", 1)
 addTab("Player", "PLAYER", 2)
@@ -861,6 +872,334 @@ addTab("BuiltinModules", "BUILTINS", 3)
 addTab("Movesets", "MOVESETS", 4)
 addTab("Models", "MODEL STORE", 5)
 addTab("Settings", "SETTINGS", 6)
+addTab("Personalization", "PERSONAL", 7)
+
+----------------------------------------------------------------
+-- PERSONALIZATION: MUSIC AND TOUCH SOUNDS
+----------------------------------------------------------------
+
+local MusicTracks = {
+    ["DM iostesso"] = {
+        URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/dm_iostesso.ft2.mp3",
+        File = "EpicPlanets/EP_Music_DM_iostesso.mp3",
+    },
+    ["Screenrecorder"] = {
+        URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Screenrecorder-2026-09-18-20-34-50-385.mp3",
+        File = "EpicPlanets/Screenrecorder-2026-09-18-20-34-50-385.mp3",
+    },
+    ["Madness Combat 2"] = {
+        URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Madness%20Combat%202%20Sheriff%20Town%20%5BHigh%20Quality%20%20Mono-like%5D%20-%20Demirgon%20%F0%9F%87%B7%F0%9F%87%B7%F0%9F%87%BA%20%28youtube%29.mp3",
+        File = "EpicPlanets/EP_Music_Madness_Combat_2.mp3",
+    },
+    ["Heads Will Roll"] = {
+        URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Heads%20Will%20Roll%20%28A-Trak%20Remix%20Radio%20Edit%29%20-%20Yeah%20Yeah%20Yeahs%20%28youtube%29.mp3",
+        File = "EpicPlanets/EP_Music_Heads_Will_Roll.mp3",
+    },
+}
+
+local TouchTracks = {
+    ["Maro Jump"] = {
+        URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/maro-jump-sound-effect_1.mp3",
+        File = "EpicPlanets/EP_Touch_Maro_Jump.mp3",
+    },
+    ["ULTRAKILL Parry"] = {
+        URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/parry-ultrakill.mp3",
+        File = "EpicPlanets/EP_Touch_ULTRAKILL_Parry.mp3",
+    },
+    ["Sonic Spindash"] = {
+        URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/sonic-spindash.mp3",
+        File = "EpicPlanets/EP_Touch_Sonic_Spindash.mp3",
+    },
+}
+
+local MusicOrder = {
+    "Screenrecorder",
+    "None",
+    "DM iostesso",
+    "Madness Combat 2",
+    "Heads Will Roll",
+}
+
+local TouchOrder = {
+    "None",
+    "Maro Jump",
+    "ULTRAKILL Parry",
+    "Sonic Spindash",
+}
+
+local selectedMusic = "Screenrecorder"
+local selectedTouch = "None"
+local personalAudioCache = ENV.__EPIC_PLANETS_PERSONAL_AUDIO_SOUNDS
+local introFlashHappened = false
+
+local function stopPersonalMusic()
+    for key, sound in pairs(personalAudioCache) do
+        if string.sub(tostring(key), 1, 6) == "Music:" then
+            pcall(function()
+                sound:Stop()
+            end)
+        end
+    end
+end
+
+local function preparePersonalAudio(kind, name)
+    if name == "None" then
+        return nil, "None selected"
+    end
+
+    local tracks = kind == "Music" and MusicTracks or TouchTracks
+    local track = tracks[name]
+    if not track then
+        return nil, "Unknown audio: " .. tostring(name)
+    end
+
+    local cacheKey = kind .. ":" .. name
+    local cached = personalAudioCache[cacheKey]
+    if cached and cached.Parent then
+        cached.Looped = kind == "Music"
+        cached.Volume = BuiltinModules.Settings.AudioVolume
+        return cached
+    end
+
+    -- Reuse the original Screenrecorder sound already prepared by Main.lua.
+    if kind == "Music" and name == "Screenrecorder" then
+        local original = ENV.__EPIC_PLANETS_FLASH_SOUND
+        if original and original.Parent then
+            original.Name = "EPIC_PLANETS_MUSIC_SCREENRECORDER"
+            original.Looped = true
+            original.Volume = BuiltinModules.Settings.AudioVolume
+            personalAudioCache[cacheKey] = original
+            return original
+        end
+    end
+
+    local folderOK, folderExists = BuiltinModules.Executor.Call("isfolder", "EpicPlanets")
+    if not folderOK or folderExists ~= true then
+        BuiltinModules.Executor.Call("makefolder", "EpicPlanets")
+    end
+
+    local fileOK, fileExists = BuiltinModules.Executor.Call("isfile", track.File)
+    if not fileOK or fileExists ~= true then
+        local downloadOK, data = pcall(function()
+            return game:HttpGet(track.URL)
+        end)
+        if not downloadOK or type(data) ~= "string" or #data == 0 then
+            return nil, "Download failed for " .. name
+        end
+
+        local writeOK, writeError = BuiltinModules.Executor.Call("writefile", track.File, data)
+        if not writeOK then
+            return nil, "Could not save " .. name .. ": " .. tostring(writeError)
+        end
+    end
+
+    local assetOK, assetId = BuiltinModules.Executor.Call("getcustomasset", track.File)
+    if not assetOK or type(assetId) ~= "string" then
+        assetOK, assetId = BuiltinModules.Executor.Call("getsynasset", track.File)
+    end
+    if not assetOK or type(assetId) ~= "string" then
+        return nil, "Audio asset API unavailable for " .. name
+    end
+
+    local sound = Instance.new("Sound")
+    sound.Name = "EPIC_PLANETS_" .. kind .. "_" .. name:gsub("%W", "_")
+    sound.SoundId = assetId
+    sound.Volume = BuiltinModules.Settings.AudioVolume
+    sound.Looped = kind == "Music"
+    sound.Parent = SoundService
+    personalAudioCache[cacheKey] = sound
+    return sound
+end
+
+local function playPersonalMusic(name, restart)
+    stopPersonalMusic()
+    if name == "None" then
+        setStatus("Music disabled (None)")
+        return false
+    end
+
+    local sound, err = preparePersonalAudio("Music", name)
+    if not sound then
+        setStatus("Music error: " .. tostring(err))
+        warn("[EPIC PLANETS AUDIO] " .. tostring(err))
+        return false
+    end
+
+    sound.Looped = true
+    sound.Volume = BuiltinModules.Settings.AudioVolume
+    local ok, playError = pcall(function()
+        if restart then
+            sound.TimePosition = 0
+        end
+        sound:Play()
+    end)
+    if not ok then
+        setStatus("Could not play music: " .. tostring(playError))
+        return false
+    end
+
+    setStatus("Music: " .. name)
+    return true
+end
+
+local function playPersonalTouch()
+    if selectedTouch == "None" then
+        return
+    end
+
+    local sound, err = preparePersonalAudio("Touch", selectedTouch)
+    if not sound then
+        warn("[EPIC PLANETS TOUCH AUDIO] " .. tostring(err))
+        setStatus("Touch sound error")
+        return
+    end
+
+    pcall(function()
+        sound.Looped = false
+        sound.Volume = BuiltinModules.Settings.AudioVolume
+        sound:Stop()
+        sound.TimePosition = 0
+        sound:Play()
+    end)
+end
+
+-- The selected music starts at the original intro flash.
+BuiltinModules.Audio.PlayFlash = function()
+    introFlashHappened = true
+    if not BuiltinModules.Settings.FlashAudio then
+        stopPersonalMusic()
+        return
+    end
+    playPersonalMusic(selectedMusic, true)
+end
+
+UI.Label(PersonalizationPage, "PERSONALIZATION", 28, 15, C.Text).Font =
+    Enum.Font.GothamBlack
+info(PersonalizationPage, "Choose the intro music and the sound played when you tap interface buttons.", 42)
+
+local musicChoiceButton
+local touchChoiceButton
+
+local function refreshMusicChoice()
+    if musicChoiceButton and musicChoiceButton.Parent then
+        musicChoiceButton.Text = "MUSIC: " .. selectedMusic .. "  [TAP TO CHANGE]"
+    end
+end
+
+local function refreshTouchChoice()
+    if touchChoiceButton and touchChoiceButton.Parent then
+        touchChoiceButton.Text = "TOUCH SOUND: " .. selectedTouch .. "  [TAP TO CHANGE]"
+    end
+end
+
+musicChoiceButton = UI.Button(PersonalizationPage, "MUSIC: Screenrecorder  [TAP TO CHANGE]", function()
+    local index = table.find(MusicOrder, selectedMusic) or 1
+    index = (index % #MusicOrder) + 1
+    selectedMusic = MusicOrder[index]
+    refreshMusicChoice()
+
+    if selectedMusic == "None" then
+        stopPersonalMusic()
+        setStatus("Music disabled (None)")
+    elseif introFlashHappened then
+        playPersonalMusic(selectedMusic, true)
+    else
+        task.spawn(function()
+            local _, err = preparePersonalAudio("Music", selectedMusic)
+            if err then
+                warn("[EPIC PLANETS AUDIO] " .. tostring(err))
+                setStatus("Music preload error")
+            else
+                setStatus("Music selected: " .. selectedMusic .. " (starts at intro flash)")
+            end
+        end)
+    end
+end, 43)
+
+UI.Button(PersonalizationPage, "PLAY MUSIC PREVIEW", function()
+    if selectedMusic == "None" then
+        stopPersonalMusic()
+        setStatus("Music preview disabled (None)")
+        return
+    end
+    task.spawn(function()
+        playPersonalMusic(selectedMusic, true)
+    end)
+end, 38)
+
+UI.Button(PersonalizationPage, "STOP MUSIC", function()
+    stopPersonalMusic()
+    setStatus("Music stopped")
+end, 38)
+
+UI.Label(PersonalizationPage, "TOUCH SOUND", 22, 12, C.Text).Font =
+    Enum.Font.GothamBold
+
+touchChoiceButton = UI.Button(PersonalizationPage, "TOUCH SOUND: None  [TAP TO CHANGE]", function()
+    local index = table.find(TouchOrder, selectedTouch) or 1
+    index = (index % #TouchOrder) + 1
+    selectedTouch = TouchOrder[index]
+    refreshTouchChoice()
+
+    if selectedTouch == "None" then
+        setStatus("Touch sound disabled (None)")
+    else
+        task.spawn(function()
+            local _, err = preparePersonalAudio("Touch", selectedTouch)
+            if err then
+                warn("[EPIC PLANETS TOUCH AUDIO] " .. tostring(err))
+                setStatus("Touch sound preload error")
+            else
+                setStatus("Touch sound selected: " .. selectedTouch)
+            end
+        end)
+    end
+end, 43)
+
+UI.Button(PersonalizationPage, "PLAY TOUCH SOUND PREVIEW", function()
+    if selectedTouch == "None" then
+        setStatus("Touch preview disabled (None)")
+        return
+    end
+    task.spawn(playPersonalTouch)
+end, 38)
+
+info(PersonalizationPage, "Defaults: Screenrecorder music, None touch sound.", 32, C.Blue)
+info(PersonalizationPage, "If an MP3 fails to load, check the GitHub file URL and executor file/asset support.", 45)
+
+-- Play the selected touch sound when tapping interface buttons.
+local function hookPersonalTouch(object)
+    if not object or not (object:IsA("TextButton") or object:IsA("ImageButton")) then
+        return
+    end
+    if object:GetAttribute("EP_PersonalTouchHooked") then
+        return
+    end
+    object:SetAttribute("EP_PersonalTouchHooked", true)
+    connect(object.Activated, function()
+        playPersonalTouch()
+    end)
+end
+
+for _, object in ipairs(GUI:GetDescendants()) do
+    hookPersonalTouch(object)
+end
+
+connect(GUI.DescendantAdded, function(object)
+    task.defer(function()
+        if GUI.Parent then
+            hookPersonalTouch(object)
+        end
+    end)
+end)
+
+-- Preload the default track, without starting it before the intro flash.
+task.spawn(function()
+    local _, err = preparePersonalAudio("Music", selectedMusic)
+    if err then
+        warn("[EPIC PLANETS AUDIO] Default music preload issue: " .. tostring(err))
+    end
+end)
 
 ----------------------------------------------------------------
 -- HOME
