@@ -72,6 +72,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local SoundService = game:GetService("SoundService")
 local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
 
 local Player = Players.LocalPlayer
 
@@ -195,12 +196,25 @@ local function tween(object, duration, properties, style)
     return animation
 end
 
+local LogEntries = {}
+local LogTextLabel = nil
+local function addLog(level, message)
+    local stamp = os.date("%H:%M:%S")
+    table.insert(LogEntries, 1, "[" .. stamp .. "] [" .. tostring(level) .. "] " .. tostring(message))
+    while #LogEntries > 100 do table.remove(LogEntries) end
+    if LogTextLabel and LogTextLabel.Parent then
+        LogTextLabel.Text = table.concat(LogEntries, "\n")
+    end
+    print("[EPIC PLANETS] [" .. tostring(level) .. "] " .. tostring(message))
+end
+
 local function setStatus(message)
     local status = ENV.__EPIC_PLANETS_STATUS
-
+    local text = tostring(message)
     if status and status.Parent then
-        status.Text = "Status: " .. tostring(message)
+        status.Text = "Status: " .. text
     end
+    addLog("INFO", text)
 end
 
 ----------------------------------------------------------------
@@ -360,6 +374,7 @@ function BuiltinModules.UI.Button(parent, text, callback, height)
 
         if not ok then
             warn("[EPIC PLANETS] Button error: " .. tostring(err))
+            addLog("ERROR", "Button " .. tostring(text) .. ": " .. tostring(err))
         end
     end)
 
@@ -703,12 +718,17 @@ local Minimize = create("TextButton", {
 UI.Round(Minimize, 6)
 UI.Stroke(Minimize, C.Blue, 0.3)
 
-local Sidebar = create("Frame", {
+local Sidebar = create("ScrollingFrame", {
     Name = "Sidebar",
     Position = UDim2.new(0, 10, 0, 48),
     Size = UDim2.new(0, 102, 1, -81),
     BackgroundColor3 = C.Background,
     BorderSizePixel = 0,
+    ScrollBarThickness = 3,
+    ScrollBarImageColor3 = C.Blue,
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    ScrollingDirection = Enum.ScrollingDirection.Y,
 }, Hub)
 
 UI.Round(Sidebar, 7)
@@ -865,6 +885,9 @@ local MovesetsPage = makePage("Movesets")
 local ModelsPage = makePage("Models")
 local SettingsPage = makePage("Settings")
 local PersonalizationPage = makePage("Personalization")
+local LogsPage = makePage("Logs")
+local TutorialPage = makePage("Tutorial")
+local ScriptStorePage = makePage("ScriptStore")
 
 addTab("Home", "HOME", 1)
 addTab("Player", "PLAYER", 2)
@@ -873,6 +896,40 @@ addTab("Movesets", "MOVESETS", 4)
 addTab("Models", "MODEL STORE", 5)
 addTab("Settings", "SETTINGS", 6)
 addTab("Personalization", "PERSONAL", 7)
+addTab("Logs", "LOGS", 8)
+addTab("Tutorial", "TUTORIAL", 9)
+addTab("ScriptStore", "SCRIPT STORE", 10)
+
+----------------------------------------------------------------
+-- LOGS AND TUTORIAL
+----------------------------------------------------------------
+
+UI.Label(LogsPage, "SYSTEM LOGS", 28, 15, C.Text).Font = Enum.Font.GothamBlack
+info(LogsPage, "Recent EPIC PLANETS status and action messages. Maximum 100 entries.", 38)
+UI.Button(LogsPage, "CLEAR LOGS", function()
+    table.clear(LogEntries)
+    if LogTextLabel and LogTextLabel.Parent then LogTextLabel.Text = "Logs cleared." end
+    addLog("INFO", "Logs cleared")
+end)
+LogTextLabel = UI.Label(LogsPage, "Waiting for events...", 0, 10, C.Text)
+LogTextLabel.TextYAlignment = Enum.TextYAlignment.Top
+LogTextLabel.TextXAlignment = Enum.TextXAlignment.Left
+LogTextLabel.TextWrapped = true
+LogTextLabel.AutomaticSize = Enum.AutomaticSize.Y
+LogTextLabel.Font = Enum.Font.Code
+LogTextLabel.Size = UDim2.new(1, -4, 0, 0)
+
+UI.Label(TutorialPage, "EPIC PLANETS TUTORIAL", 28, 15, C.Text).Font = Enum.Font.GothamBlack
+info(TutorialPage, "1. HOME: overview, player and place information, and quick navigation.", 45, C.Text)
+info(TutorialPage, "2. PLAYER: toggle Speed, High Jump and Fly. These client-side effects depend on the game and executor.", 58)
+info(TutorialPage, "3. BUILTINS: inspect the built-in components and replay the intro/flash audio.", 50)
+info(TutorialPage, "4. MOVESETS: refresh and run Lua modules from the EpicPlanets/Modules folder when executor file APIs are available.", 62)
+info(TutorialPage, "5. MODEL STORE: install or remove the Orbital Core visual model.", 48)
+info(TutorialPage, "6. SETTINGS: change the title, rainbow outline, flash audio, test audio and minimize the hub.", 56)
+info(TutorialPage, "7. PERSONALIZATION: cycle music and touch sounds, preview them, or stop the music. Audio download playback needs executor file/asset APIs.", 65)
+info(TutorialPage, "8. LOGS: review recent actions and errors. Use CLEAR LOGS to reset the list.", 48)
+info(TutorialPage, "Tap a tab in the left sidebar to switch pages. The small EP icon restores the hub after minimizing.", 52, C.Blue)
+info(TutorialPage, "9. SCRIPT STORE: search universal scripts or scripts for a specific Roblox game. Review community code before using it.", 55)
 
 ----------------------------------------------------------------
 -- PERSONALIZATION: MUSIC AND TOUCH SOUNDS
@@ -888,7 +945,7 @@ local MusicTracks = {
         File = "EpicPlanets/Screenrecorder-2026-09-18-20-34-50-385.mp3",
     },
     ["Madness Combat 2"] = {
-        URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Madness%20Combat%202%20Sheriff%20Town%20%5BHigh%20Quality%20%20Mono-like%5D%20-%20Demirgon%20%F0%9F%87%B7%F0%9F%87%B7%F0%9F%87%BA%20%28youtube%29.mp3",
+        URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Madness%20Combat%202%20Sheriff%20Town%20%5BHigh%20Quality%20%20Mono-like%5D%20-%20Demirgon%20%F0%9F%87%B7%F0%9F%87%BA%20%28youtube%29.mp3",
         File = "EpicPlanets/EP_Music_Madness_Combat_2.mp3",
     },
     ["Heads Will Roll"] = {
@@ -1495,6 +1552,281 @@ info(
 )
 
 ----------------------------------------------------------------
+-- SCRIPT STORE (ScriptBlox API)
+----------------------------------------------------------------
+
+UI.Label(ScriptStorePage, "SCRIPT STORE", 27, 15, C.Text).Font = Enum.Font.GothamBlack
+info(ScriptStorePage, "Browse community scripts from ScriptBlox. Powered by ScriptBlox.com.", 42, C.Blue)
+info(ScriptStorePage, "Safety: community scripts are untrusted. This store previews/copies code; it does not auto-execute downloaded scripts.", 52, C.Red)
+
+local storeMode = "all"
+local storePageNumber = 1
+local storeQuery = ""
+local storeResults = create("Frame", {
+    Name = "ScriptStoreResults",
+    LayoutOrder = 5,
+    Size = UDim2.new(1, -4, 0, 0),
+    AutomaticSize = Enum.AutomaticSize.Y,
+    BackgroundTransparency = 1,
+}, ScriptStorePage)
+local storeLayout = Instance.new("UIListLayout")
+storeLayout.Padding = UDim.new(0, 6)
+storeLayout.SortOrder = Enum.SortOrder.LayoutOrder
+storeLayout.Parent = storeResults
+
+local storeSearch = create("TextBox", {
+    Name = "ScriptSearch",
+    LayoutOrder = 1,
+    Size = UDim2.new(1, -4, 0, 36),
+    BackgroundColor3 = C.PanelAlt,
+    BorderSizePixel = 0,
+    Text = "",
+    PlaceholderText = "Search scripts or game name...",
+    PlaceholderColor3 = C.Muted,
+    TextColor3 = C.Text,
+    TextSize = 11,
+    Font = Enum.Font.Gotham,
+    ClearTextOnFocus = false,
+}, ScriptStorePage)
+UI.Round(storeSearch, 6)
+UI.Stroke(storeSearch, C.Blue, 0.4)
+
+local storeModeButton
+storeModeButton = UI.Button(ScriptStorePage, "CATEGORY: ALL SCRIPTS  [TAP TO CHANGE]", function()
+    if storeMode == "all" then
+        storeMode = "universal"
+    elseif storeMode == "universal" then
+        storeMode = "game"
+    else
+        storeMode = "all"
+    end
+    storeModeButton.Text = "CATEGORY: " .. string.upper(storeMode) .. "  [TAP TO CHANGE]"
+end, 36)
+
+storeModeButton.LayoutOrder = 2
+local storeStatus = info(ScriptStorePage, "Enter a search term, then tap SEARCH. Leave it blank to browse recent scripts.", 38)
+storeStatus.LayoutOrder = 4
+
+local function clearStoreResults()
+    for _, child in ipairs(storeResults:GetChildren()) do
+        if child:IsA("GuiObject") then child:Destroy() end
+    end
+end
+
+local function storeRequest(url)
+    local ok, body = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if not ok then
+        return nil, tostring(body)
+    end
+    local decodeOK, data = pcall(function()
+        return HttpService:JSONDecode(body)
+    end)
+    if not decodeOK then
+        return nil, "Could not parse ScriptBlox response."
+    end
+    return data
+end
+
+local function showStorePreview(scriptData)
+    local source = scriptData and scriptData.script
+    if type(source) ~= "string" or source == "" then
+        local slug = tostring(scriptData.slug or scriptData._id or "")
+        if slug == "" then
+            storeStatus.Text = "This listing did not include source code."
+            return
+        end
+        local data, err = storeRequest("https://scriptblox.com/api/script/raw/" .. HttpService:UrlEncode(slug))
+        if not data then
+            storeStatus.Text = "Could not load source: " .. tostring(err)
+            return
+        end
+        source = data.script or data.result or data.raw or data
+        if type(source) ~= "string" then
+            storeStatus.Text = "Raw source was not returned by ScriptBlox."
+            return
+        end
+    end
+
+    local preview = create("TextBox", {
+        Name = "ScriptSourcePreview",
+        Size = UDim2.new(1, -4, 0, 190),
+        BackgroundColor3 = C.Panel,
+        BorderSizePixel = 0,
+        Text = source,
+        TextColor3 = C.Text,
+        TextSize = 10,
+        Font = Enum.Font.Code,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        TextWrapped = false,
+        ClearTextOnFocus = false,
+        MultiLine = true,
+        TextEditable = false,
+    }, storeResults)
+    UI.Round(preview, 6)
+    UI.Stroke(preview, C.Blue, 0.45)
+    storeStatus.Text = "Source preview opened. Review it before deciding what to do."
+    addLog("STORE", "Previewed source: " .. tostring(scriptData.title or "Untitled"))
+end
+
+local function addStoreListing(item, index)
+    local title = tostring(item.title or "Untitled script")
+    local gameName = "Universal"
+    if item.game and type(item.game) == "table" and item.game.name then
+        gameName = tostring(item.game.name)
+    elseif not item.isUniversal then
+        gameName = "Game-specific"
+    end
+    local verifiedText = item.verified and "VERIFIED" or "COMMUNITY"
+    local patchedText = item.isPatched and "PATCHED" or "STATUS UNKNOWN"
+
+    local card = create("Frame", {
+        Name = "ScriptListing_" .. tostring(index),
+        Size = UDim2.new(1, -4, 0, 112),
+        BackgroundColor3 = C.PanelAlt,
+        BorderSizePixel = 0,
+    }, storeResults)
+    UI.Round(card, 7)
+    UI.Stroke(card, item.verified and C.Green or C.Blue, 0.45)
+
+    create("TextLabel", {
+        Position = UDim2.new(0, 8, 0, 5),
+        Size = UDim2.new(1, -16, 0, 30),
+        BackgroundTransparency = 1,
+        Text = title,
+        TextColor3 = C.Text,
+        TextSize = 11,
+        Font = Enum.Font.GothamBold,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, card)
+    create("TextLabel", {
+        Position = UDim2.new(0, 8, 0, 36),
+        Size = UDim2.new(1, -16, 0, 18),
+        BackgroundTransparency = 1,
+        Text = gameName .. "  •  " .. verifiedText .. "  •  " .. patchedText,
+        TextColor3 = C.Muted,
+        TextSize = 9,
+        Font = Enum.Font.Gotham,
+        TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, card)
+
+    local previewButton = create("TextButton", {
+        Position = UDim2.new(0, 8, 0, 62),
+        Size = UDim2.new(0.49, -8, 0, 34),
+        BackgroundColor3 = C.Panel,
+        BorderSizePixel = 0,
+        Text = "VIEW SOURCE",
+        TextColor3 = C.Text,
+        TextSize = 9,
+        Font = Enum.Font.GothamBold,
+    }, card)
+    UI.Round(previewButton, 5)
+    connect(previewButton.Activated, function()
+        showStorePreview(item)
+    end)
+
+    local copyButton = create("TextButton", {
+        Position = UDim2.new(0.51, 0, 0, 62),
+        Size = UDim2.new(0.49, -8, 0, 34),
+        BackgroundColor3 = C.Panel,
+        BorderSizePixel = 0,
+        Text = "COPY SOURCE",
+        TextColor3 = C.Text,
+        TextSize = 9,
+        Font = Enum.Font.GothamBold,
+    }, card)
+    UI.Round(copyButton, 5)
+    connect(copyButton.Activated, function()
+        local source = item.script
+        if type(source) ~= "string" or source == "" then
+            local slug = tostring(item.slug or item._id or "")
+            if slug == "" then
+                storeStatus.Text = "No source identifier was provided."
+                return
+            end
+            local data, err = storeRequest("https://scriptblox.com/api/script/raw/" .. HttpService:UrlEncode(slug))
+            if not data then
+                storeStatus.Text = "Could not fetch source: " .. tostring(err)
+                return
+            end
+            source = data.script or data.result or data.raw or data
+        end
+        if type(source) ~= "string" or source == "" then
+            storeStatus.Text = "ScriptBlox did not return source code."
+            return
+        end
+        local clipboard = (type(ENV.setclipboard) == "function" and ENV.setclipboard)
+            or (type(setclipboard) == "function" and setclipboard)
+        if clipboard then
+            local ok, err = pcall(clipboard, source)
+            storeStatus.Text = ok and "Source copied. Review it before running." or ("Clipboard failed: " .. tostring(err))
+        else
+            showStorePreview({title = title, script = source})
+            storeStatus.Text = "Clipboard API unavailable; source opened for manual review/copy."
+        end
+        addLog("STORE", "Copied source request: " .. title)
+    end)
+end
+
+local function searchScriptStore()
+    clearStoreResults()
+    storePageNumber = 1
+    storeQuery = tostring(storeSearch.Text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    storeStatus.Text = "Searching ScriptBlox..."
+    local params = {"page=1", "max=12", "order=desc", "sortBy=updatedAt"}
+    if storeMode == "universal" then
+        table.insert(params, "universal=1")
+    elseif storeMode == "game" then
+        table.insert(params, "universal=0")
+    end
+    local base
+    if storeQuery ~= "" then
+        base = "https://scriptblox.com/api/script/search?q=" .. HttpService:UrlEncode(storeQuery)
+    else
+        base = "https://scriptblox.com/api/script/fetch"
+    end
+    local separator = base:find("?", 1, true) and "&" or "?"
+    local data, err = storeRequest(base .. separator .. table.concat(params, "&"))
+    if not data then
+        storeStatus.Text = "ScriptBlox request failed: " .. tostring(err)
+        addLog("ERROR", "Script Store request failed")
+        return
+    end
+    local result = data.result or data
+    local scripts = result.scripts
+    if type(scripts) ~= "table" then
+        storeStatus.Text = "No script list received. ScriptBlox may be temporarily unavailable."
+        return
+    end
+    for index, item in ipairs(scripts) do
+        if type(item) == "table" then
+            addStoreListing(item, index)
+        end
+    end
+    storeStatus.Text = #scripts > 0 and ("Loaded " .. tostring(#scripts) .. " listing(s). Powered by ScriptBlox.com.") or "No scripts found. Try another search."
+    addLog("STORE", "Loaded " .. tostring(#scripts) .. " ScriptBlox listing(s)")
+end
+
+local storeSearchButton = UI.Button(ScriptStorePage, "SEARCH SCRIPTS", searchScriptStore, 38)
+storeSearchButton.LayoutOrder = 3
+local storeWebsiteButton = UI.Button(ScriptStorePage, "OPEN SCRIPTBLOX WEBSITE", function()
+    local url = "https://scriptblox.com/"
+    local clipboard = (type(ENV.setclipboard) == "function" and ENV.setclipboard)
+        or (type(setclipboard) == "function" and setclipboard)
+    if clipboard then
+        pcall(clipboard, url)
+        storeStatus.Text = "Website URL copied: " .. url
+    else
+        storeStatus.Text = url
+    end
+end, 34)
+storeWebsiteButton.LayoutOrder = 6
+
+----------------------------------------------------------------
 -- MOVESETS / LOCAL LUA MODULES
 ----------------------------------------------------------------
 
@@ -2031,6 +2363,7 @@ ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
 showPage("Home")
 setStatus("Loading intro")
 
+addLog("INFO", "Main.lua initialized")
 print("[EPIC PLANETS] Main.lua loaded.")
 print("[EPIC PLANETS] BuiltinModules " .. BuiltinModules.Version)
 
