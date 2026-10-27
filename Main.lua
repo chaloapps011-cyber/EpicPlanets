@@ -414,39 +414,40 @@ BuiltinModules.ModuleLoader = {}
 BuiltinModules.ModuleLoader.Folder = "EpicPlanets/Modules"
 
 function BuiltinModules.ModuleLoader.EnsureFolders()
+    -- Filesystem APIs are optional. The main UI is self-contained and must
+    -- still start when an executor has no file-library support.
     local executor = BuiltinModules.Executor
+    local makefolder = executor.Get("makefolder")
+    local isfolder = executor.Get("isfolder")
 
-    local folders = {
-        "EpicPlanets",
-        BuiltinModules.ModuleLoader.Folder,
-    }
+    if type(makefolder) ~= "function" then
+        return false, "Executor file APIs unavailable; local modules are disabled."
+    end
 
-    for _, folder in ipairs(folders) do
-        local ok, exists = executor.Call("isfolder", folder)
-
-        if not ok or exists ~= true then
-            executor.Call("makefolder", folder)
+    for _, folder in ipairs({"EpicPlanets", BuiltinModules.ModuleLoader.Folder}) do
+        local exists = false
+        if type(isfolder) == "function" then
+            local ok, value = pcall(isfolder, folder)
+            exists = ok and value == true
+        end
+        if not exists then
+            pcall(makefolder, folder)
         end
     end
+    return true
 end
 
 function BuiltinModules.ModuleLoader.List()
     BuiltinModules.ModuleLoader.EnsureFolders()
 
-    local listFunction =
-        BuiltinModules.Executor.Get("listfiles")
-
-    if not listFunction then
-        return nil, "listfiles unavailable"
+    local listFunction = BuiltinModules.Executor.Get("listfiles")
+    if type(listFunction) ~= "function" then
+        return nil, "Local module library unavailable in this executor; the main interface still works."
     end
 
-    local ok, result = pcall(
-        listFunction,
-        BuiltinModules.ModuleLoader.Folder
-    )
-
+    local ok, result = pcall(listFunction, BuiltinModules.ModuleLoader.Folder)
     if not ok or type(result) ~= "table" then
-        return nil, "Could not read Modules folder"
+        return nil, "Cannot scan EpicPlanets/Modules. Check executor file permissions."
     end
 
     return result
@@ -485,7 +486,8 @@ end
 -- PREPARE AUDIO BEFORE INTRO
 ----------------------------------------------------------------
 
-BuiltinModules.ModuleLoader.EnsureFolders()
+-- Do not block startup if local filesystem/library APIs are unavailable.
+pcall(function() BuiltinModules.ModuleLoader.EnsureFolders() end)
 
 local flashSound = BuiltinModules.Audio.Prepare()
 
@@ -914,6 +916,7 @@ local SettingsPage = makePage("Settings")
 local PersonalizationPage = makePage("Personalization")
 local ScriptBloxPage = makePage("ScriptBlox")
 local LogsPage = makePage("Logs")
+local ExecutorPage = makePage("Executor")
 
 addTab("Home", "HOME", 1)
 addTab("Player", "PLAYER", 2)
@@ -924,6 +927,7 @@ addTab("Settings", "SETTINGS", 6)
 addTab("Personalization", "PERSONAL", 7)
 addTab("ScriptBlox", "SCRIPTBLOX", 8)
 addTab("Logs", "LOGS", 9)
+addTab("Executor", "EXECUTOR", 10)
 
 ----------------------------------------------------------------
 -- SCRIPTBLOX STORE
@@ -1260,6 +1264,173 @@ LogsOutput.TextXAlignment = Enum.TextXAlignment.Left
 LogsOutput.TextYAlignment = Enum.TextYAlignment.Top
 LogsOutput.Font = Enum.Font.Code
 refreshLogsPage()
+
+----------------------------------------------------------------
+-- EXECUTOR HUB: EDITOR + MANUAL EXECUTION + USER API
+----------------------------------------------------------------
+
+UI.Label(ExecutorPage, "EXECUTOR HUB", 29, 14, C.Text).Font = Enum.Font.GothamBlack
+info(ExecutorPage, "Editor and console for code you trust. Downloaded community scripts are never run automatically.", 48, C.Muted)
+
+local ExecutorEditor = create("TextBox", {
+    Name = "ExecutorEditor",
+    Size = UDim2.new(1, -4, 0, 190),
+    BackgroundColor3 = C.PanelAlt,
+    BorderSizePixel = 0,
+    ClearTextOnFocus = false,
+    MultiLine = true,
+    Text = "-- EPIC PLANETS editor\nprint('Hello from EPIC PLANETS')",
+    TextColor3 = C.Text,
+    PlaceholderText = "Write Luau here...",
+    PlaceholderColor3 = C.Muted,
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top,
+    TextWrapped = false,
+}, ExecutorPage)
+UI.Round(ExecutorEditor, 7)
+UI.Stroke(ExecutorEditor, C.Blue, 0.45)
+local editorPadding = Instance.new("UIPadding")
+editorPadding.PaddingTop = UDim.new(0, 8)
+editorPadding.PaddingBottom = UDim.new(0, 8)
+editorPadding.PaddingLeft = UDim.new(0, 8)
+editorPadding.PaddingRight = UDim.new(0, 8)
+editorPadding.Parent = ExecutorEditor
+
+local ExecutorStatus = UI.Label(ExecutorPage, "Ready. Execution requires a compatible executor exposing loadstring.", 38, 10, C.Muted)
+ExecutorStatus.TextWrapped = true
+
+UI.Button(ExecutorPage, "EXECUTE EDITOR CODE", function()
+    local source = ExecutorEditor.Text or ""
+    if string.gsub(source, "%s", "") == "" then
+        ExecutorStatus.Text = "Editor is empty."
+        addLog("WARN", "Executor: attempted to run empty editor")
+        return
+    end
+
+    local loadFn = BuiltinModules.Executor.Get("loadstring")
+    if not loadFn then
+        ExecutorStatus.Text = "loadstring unavailable in this environment."
+        addLog("ERROR", "Executor: loadstring unavailable")
+        return
+    end
+
+    ExecutorStatus.Text = "Compiling and running editor code..."
+    addLog("WARN", "Manual editor execution requested")
+    task.spawn(function()
+        local compileOK, chunk, compileError = pcall(loadFn, source, "EPIC_PLANETS_Editor")
+        if not compileOK or type(chunk) ~= "function" then
+            local message = tostring(compileOK and compileError or chunk)
+            ExecutorStatus.Text = "Compile failed: " .. string.sub(message, 1, 180)
+            addLog("ERROR", "Executor compile failed: " .. message)
+            return
+        end
+
+        local runOK, result = pcall(chunk)
+        if not runOK then
+            ExecutorStatus.Text = "Runtime error: " .. string.sub(tostring(result), 1, 180)
+            addLog("ERROR", "Executor runtime error: " .. tostring(result))
+        else
+            ExecutorStatus.Text = "Execution finished. Check Logs for captured errors."
+            addLog("INFO", "Editor code finished without an uncaught error")
+        end
+    end)
+end, 36)
+
+UI.Button(ExecutorPage, "CLEAR EDITOR", function()
+    ExecutorEditor.Text = ""
+    ExecutorStatus.Text = "Editor cleared."
+    addLog("INFO", "Executor editor cleared")
+end, 32)
+
+UI.Label(ExecutorPage, "YOUR API", 25, 12, C.Text).Font = Enum.Font.GothamBlack
+info(ExecutorPage, "Enter the base URL of your own API. Expected search route: /api/scripts/search?q=... . The server response is shown below; adapt the route to your backend if needed.", 55, C.Muted)
+
+local OwnAPIBase = create("TextBox", {
+    Name = "OwnAPIBaseURL",
+    Size = UDim2.new(1, -4, 0, 36),
+    BackgroundColor3 = C.PanelAlt,
+    BorderSizePixel = 0,
+    ClearTextOnFocus = false,
+    PlaceholderText = "https://your-api.example.com",
+    PlaceholderColor3 = C.Muted,
+    Text = "",
+    TextColor3 = C.Text,
+    TextSize = 11,
+    Font = Enum.Font.Code,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, ExecutorPage)
+UI.Round(OwnAPIBase, 7)
+UI.Stroke(OwnAPIBase, C.Blue, 0.45)
+
+local OwnAPIQuery = create("TextBox", {
+    Name = "OwnAPIQuery",
+    Size = UDim2.new(1, -4, 0, 36),
+    BackgroundColor3 = C.PanelAlt,
+    BorderSizePixel = 0,
+    ClearTextOnFocus = false,
+    PlaceholderText = "Search your API...",
+    PlaceholderColor3 = C.Muted,
+    Text = "",
+    TextColor3 = C.Text,
+    TextSize = 11,
+    Font = Enum.Font.Gotham,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, ExecutorPage)
+UI.Round(OwnAPIQuery, 7)
+UI.Stroke(OwnAPIQuery, C.Blue, 0.45)
+
+local OwnAPIOutput = UI.Label(ExecutorPage, "API response will appear here.", 90, 10, C.Text)
+OwnAPIOutput.Name = "OwnAPIResponse"
+OwnAPIOutput.Size = UDim2.new(1, -4, 0, 0)
+OwnAPIOutput.AutomaticSize = Enum.AutomaticSize.Y
+OwnAPIOutput.TextWrapped = true
+OwnAPIOutput.TextXAlignment = Enum.TextXAlignment.Left
+OwnAPIOutput.TextYAlignment = Enum.TextYAlignment.Top
+OwnAPIOutput.Font = Enum.Font.Code
+
+UI.Button(ExecutorPage, "QUERY MY API", function()
+    local base = string.gsub(OwnAPIBase.Text or "", "^%s*(.-)%s*$", "%1")
+    base = string.gsub(base, "/+$", "")
+    local query = string.gsub(OwnAPIQuery.Text or "", "^%s*(.-)%s*$", "%1")
+    if base == "" then
+        OwnAPIOutput.Text = "Enter your API base URL first."
+        return
+    end
+    if not string.match(base, "^https?://") then
+        OwnAPIOutput.Text = "URL must begin with http:// or https://"
+        return
+    end
+
+    local endpoint = base .. "/api/scripts/search?q=" .. urlEncode(query)
+    OwnAPIOutput.Text = "Requesting " .. endpoint .. " ..."
+    addLog("INFO", "Custom API request: " .. endpoint)
+    task.spawn(function()
+        local ok, response = pcall(function()
+            return game:HttpGet(endpoint)
+        end)
+        if not ok or type(response) ~= "string" then
+            OwnAPIOutput.Text = "Request failed. Check URL, route, network and executor HTTP support.\n" .. string.sub(tostring(response), 1, 300)
+            addLog("ERROR", "Custom API request failed: " .. tostring(response))
+            return
+        end
+        local shown = response
+        local decodedOK, decoded = pcall(function()
+            return HttpService:JSONDecode(response)
+        end)
+        if decodedOK then
+            local encodeOK, pretty = pcall(function()
+                return HttpService:JSONEncode(decoded)
+            end)
+            if encodeOK then shown = pretty end
+        end
+        OwnAPIOutput.Text = string.sub(shown, 1, 3500)
+        addLog("INFO", "Custom API response received (" .. tostring(#response) .. " bytes)")
+    end)
+end, 34)
+
+info(ExecutorPage, "Security note: only run code you understand. A third-party script can access your game session or modify the experience. API search displays data only; it does not execute the response.", 58, C.Red)
 
 ----------------------------------------------------------------
 -- PERSONALIZATION: MUSIC AND TOUCH SOUNDS
