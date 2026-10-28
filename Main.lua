@@ -1,44 +1,33 @@
 --[[
     EPIC PLANETS
-    Main.lua + BuiltinModules + Tetris + Credits + Mini Effects + Game Blur + Back Animation
-    Optimized & Fixed for Delta Executor
+    Main.lua + BuiltinModules + Clean UI (Zero Blur) + Responsive Tetris + Back Easing + Credits + Sparks
+    Delta / Android
 ]]
 
 local ENV = (type(getgenv) == "function" and getgenv()) or _G
 
 ----------------------------------------------------------------
--- CLEANUP (BLINDADO PARA O DELTA)
+-- CLEANUP
 ----------------------------------------------------------------
 if type(ENV.__EPIC_PLANETS_CONNECTIONS) == "table" then
     for _, connection in ipairs(ENV.__EPIC_PLANETS_CONNECTIONS) do
-        if typeof(connection) == "RBXScriptConnection" then
-            pcall(function() connection:Disconnect() end)
-        end
+        pcall(function() connection:Disconnect() end)
     end
 end
-if typeof(ENV.__EPIC_PLANETS_GUI) == "Instance" then
-    pcall(function() ENV.__EPIC_PLANETS_GUI:Destroy() end)
-end
-if typeof(ENV.__EPIC_PLANETS_TETRIS_GUI) == "Instance" then
-    pcall(function() ENV.__EPIC_PLANETS_TETRIS_GUI:Destroy() end)
-end
-if typeof(ENV.__EPIC_PLANETS_FLASH_SOUND) == "Instance" then
+if ENV.__EPIC_PLANETS_GUI then pcall(function() ENV.__EPIC_PLANETS_GUI:Destroy() end) end
+if ENV.__EPIC_PLANETS_TETRIS_GUI then pcall(function() ENV.__EPIC_PLANETS_TETRIS_GUI:Destroy() end) end
+if ENV.__EPIC_PLANETS_FLASH_SOUND then
     pcall(function() ENV.__EPIC_PLANETS_FLASH_SOUND:Stop() ENV.__EPIC_PLANETS_FLASH_SOUND:Destroy() end)
 end
 if type(ENV.__EPIC_PLANETS_PERSONAL_AUDIO_SOUNDS) == "table" then
     for _, oldSound in pairs(ENV.__EPIC_PLANETS_PERSONAL_AUDIO_SOUNDS) do
-        if typeof(oldSound) == "Instance" then
-            pcall(function() oldSound:Stop() oldSound:Destroy() end)
-        end
+        pcall(function() oldSound:Stop() oldSound:Destroy() end)
     end
 end
 ENV.__EPIC_PLANETS_PERSONAL_AUDIO_SOUNDS = {}
-
 if type(ENV.__EPIC_PLANETS_MODELS) == "table" then
     for _, model in ipairs(ENV.__EPIC_PLANETS_MODELS) do
-        if typeof(model) == "Instance" then
-            pcall(function() model:Destroy() end)
-        end
+        pcall(function() model:Destroy() end)
     end
 end
 
@@ -57,11 +46,6 @@ local UserInputService = game:GetService("UserInputService")
 local SoundService = game:GetService("SoundService")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
-local Lighting = game:GetService("Lighting")
-
-if Lighting:FindFirstChild("EpicPlanetsBlur") then
-    Lighting.EpicPlanetsBlur:Destroy()
-end
 
 local Player = Players.LocalPlayer
 if not Player then error("[EPIC PLANETS] LocalPlayer not found.") end
@@ -71,7 +55,7 @@ local PlayerGui = Player:WaitForChild("PlayerGui")
 -- BUILTINMODULES: CORE
 ----------------------------------------------------------------
 local BuiltinModules = {}
-BuiltinModules.Version = "1.4.0 - Delta Edition"
+BuiltinModules.Version = "1.0.0"
 BuiltinModules.Initialized = false
 
 BuiltinModules.Colors = {
@@ -119,8 +103,8 @@ local function create(className, properties, parent)
     object.Parent = parent
     return object
 end
-local function tween(object, duration, properties, style)
-    local animation = TweenService:Create(object, TweenInfo.new(duration, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties)
+local function tween(object, duration, properties, style, direction)
+    local animation = TweenService:Create(object, TweenInfo.new(duration, style or Enum.EasingStyle.Quad, direction or Enum.EasingDirection.Out), properties)
     animation:Play()
     return animation
 end
@@ -177,7 +161,8 @@ end
 function BuiltinModules.Audio.PlayFlash()
     if not BuiltinModules.Settings.FlashAudio then return end
     local sound = ENV.__EPIC_PLANETS_FLASH_SOUND
-    if sound and sound.Parent then pcall(function() sound:Stop() sound.TimePosition = 0 sound:Play() end) end
+    if not sound or not sound.Parent then return end
+    pcall(function() sound:Stop() sound.TimePosition = 0 sound:Play() end)
 end
 
 BuiltinModules.UI = {}
@@ -194,7 +179,7 @@ function BuiltinModules.UI.Button(parent, text, callback, height)
     BuiltinModules.UI.Stroke(button, nil, 0.4)
     connect(button.Activated, function()
         local ok, err = pcall(callback, button)
-        if not ok then addLog("ERROR", "Button error: " .. tostring(err)) end
+        if not ok then addLog("ERROR", "Button error: " .. tostring(err)) warn("[EPIC PLANETS] " .. tostring(err)) end
     end)
     return button
 end
@@ -206,58 +191,61 @@ BuiltinModules.ModuleLoader = {}
 BuiltinModules.ModuleLoader.Folder = "EpicPlanets/Modules"
 function BuiltinModules.ModuleLoader.EnsureFolders()
     local makefolder = BuiltinModules.Executor.Get("makefolder")
+    local isfolder = BuiltinModules.Executor.Get("isfolder")
     if type(makefolder) ~= "function" then return false end
-    for _, folder in ipairs({"EpicPlanets", BuiltinModules.ModuleLoader.Folder}) do pcall(makefolder, folder) end
+    for _, folder in ipairs({"EpicPlanets", BuiltinModules.ModuleLoader.Folder}) do
+        local exists = false
+        if type(isfolder) == "function" then local ok, value = pcall(isfolder, folder); exists = ok and value == true end
+        if not exists then pcall(makefolder, folder) end
+    end
     return true
 end
 function BuiltinModules.ModuleLoader.List()
     BuiltinModules.ModuleLoader.EnsureFolders()
     local listFunction = BuiltinModules.Executor.Get("listfiles")
-    if type(listFunction) ~= "function" then return nil, "Unavailable." end
+    if type(listFunction) ~= "function" then return nil, "Local module library unavailable." end
     local ok, result = pcall(listFunction, BuiltinModules.ModuleLoader.Folder)
-    if not ok or type(result) ~= "table" then return nil, "Cannot scan." end
+    if not ok or type(result) ~= "table" then return nil, "Cannot scan EpicPlanets/Modules." end
     return result
 end
 function BuiltinModules.ModuleLoader.Run(path)
     local readOK, source = BuiltinModules.Executor.Call("readfile", path)
-    if not readOK or type(source) ~= "string" then return false, "Could not read" end
+    if not readOK or type(source) ~= "string" then return false, "Could not read module file" end
     local loadFunction = BuiltinModules.Executor.Get("loadstring")
     if not loadFunction then return false, "loadstring unavailable" end
     local compileOK, chunk = pcall(loadFunction, source)
     if not compileOK or type(chunk) ~= "function" then return false, tostring(chunk) end
     local runOK, result = pcall(chunk)
     if not runOK then return false, tostring(result) end
-    return true, "Executed"
+    return true, "Module executed"
 end
 
 pcall(function() BuiltinModules.ModuleLoader.EnsureFolders() end)
 local flashSound = BuiltinModules.Audio.Prepare()
+
 local C = BuiltinModules.Colors
 local UI = BuiltinModules.UI
 
-----------------------------------------------------------------
--- GAME BLUR EFFECT
-----------------------------------------------------------------
-local BlurEffect = Instance.new("BlurEffect")
-BlurEffect.Name = "EpicPlanetsBlur"
-BlurEffect.Size = 0
-BlurEffect.Parent = Lighting
-local function updateGameBlur(isVisible)
-    local targetSize = isVisible and 15 or 0
-    tween(BlurEffect, 0.4, { Size = targetSize }, Enum.EasingStyle.Quad)
-end
-
-----------------------------------------------------------------
--- GUI ROOT & INTRO
-----------------------------------------------------------------
 local GUI = create("ScreenGui", { Name = "EPIC_PLANETS_GUI", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 999, ZIndexBehavior = Enum.ZIndexBehavior.Sibling }, PlayerGui)
 ENV.__EPIC_PLANETS_GUI = GUI
 
+----------------------------------------------------------------
+-- INTRO
+----------------------------------------------------------------
 local Intro = create("Frame", { Name = "IntroScreen", Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, GUI)
+local StarSparks = {}
 for i = 1, 65 do
-    local star = create("Frame", { Position = UDim2.fromScale(math.random(1, 99) / 100, math.random(1, 99) / 100), Size = UDim2.fromOffset(math.random(1, 3), math.random(1, 3)), BackgroundColor3 = i % 5 == 0 and C.Blue or C.Text, BackgroundTransparency = math.random(25, 75) / 100, BorderSizePixel = 0 }, Intro)
+    local star = create("Frame", {
+        Position = UDim2.fromScale(math.random(1, 99) / 100, math.random(1, 99) / 100),
+        Size = UDim2.fromOffset(math.random(1, 3), math.random(1, 3)),
+        BackgroundColor3 = i % 5 == 0 and C.Blue or C.Text,
+        BackgroundTransparency = math.random(25, 75) / 100,
+        BorderSizePixel = 0,
+    }, Intro)
     UI.Round(star, 4)
+    table.insert(StarSparks, star)
 end
+
 local IntroTitle = create("TextLabel", { Position = UDim2.new(0, 8, 0, 17), Size = UDim2.new(1, -16, 0, 34), BackgroundTransparency = 1, Text = Title, TextColor3 = C.Text, TextSize = 20, Font = Enum.Font.GothamBlack, TextWrapped = true }, Intro)
 local IntroPanel = create("Frame", { Name = "IntroPanel", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.53), Size = UDim2.new(0.86, 0, 0.66, 0), BackgroundColor3 = C.Panel, BorderSizePixel = 0 }, Intro)
 local introConstraint = Instance.new("UISizeConstraint"); introConstraint.MinSize = Vector2.new(275, 350); introConstraint.MaxSize = Vector2.new(480, 530); introConstraint.Parent = IntroPanel
@@ -283,8 +271,10 @@ for i = 1, 321 do
     local fragment = create("Frame", { Name = "Fragment" .. i, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(math.random(), math.random()), Size = UDim2.fromOffset(math.random(2, 5), math.random(2, 5)), BackgroundColor3 = i % 6 == 0 and C.Purple or C.Blue, BorderSizePixel = 0 }, FragmentArea)
     UI.Round(fragment, 4); Fragments[i] = fragment
 end
-local ProgressBack = create("Frame", { Position = UDim2.new(0, 14, 1, -43), Size = UDim2.new(1, -28, 0, 5), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0 }, IntroPanel); UI.Round(ProgressBack, 4)
-local Progress = create("Frame", { Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = C.Blue, BorderSizePixel = 0 }, ProgressBack); UI.Round(Progress, 4)
+local ProgressBack = create("Frame", { Position = UDim2.new(0, 14, 1, -43), Size = UDim2.new(1, -28, 0, 5), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0 }, IntroPanel)
+UI.Round(ProgressBack, 4)
+local Progress = create("Frame", { Size = UDim2.new(0, 0, 1, 0), BackgroundColor3 = C.Blue, BorderSizePixel = 0 }, ProgressBack)
+UI.Round(Progress, 4)
 local FragmentCount = create("TextLabel", { Position = UDim2.new(0, 0, 1, -32), Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1, Text = "0 / 321", TextColor3 = C.Muted, TextSize = 10, Font = Enum.Font.Code }, IntroPanel)
 local TapIn = create("TextButton", { Name = "TapIn", AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -50), Size = UDim2.new(0.7, 0, 0, 40), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0, Text = "T A P   I N", TextColor3 = C.Text, TextSize = 14, Font = Enum.Font.GothamBlack, Visible = false }, IntroPanel)
 UI.Round(TapIn, 7); UI.Stroke(TapIn, C.Blue, 0.08)
@@ -292,17 +282,9 @@ UI.Round(TapIn, 7); UI.Stroke(TapIn, C.Blue, 0.08)
 ----------------------------------------------------------------
 -- MAIN HUB
 ----------------------------------------------------------------
-local Hub = create("Frame", { Name = "MainHub", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.51), Size = UDim2.new(0.91, 0, 0.74, 0), BackgroundColor3 = C.Panel, BorderSizePixel = 0, Visible = false, ClipsDescendants = true }, GUI)
+local Hub = create("Frame", { Name = "MainHub", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.51), Size = UDim2.new(0.91, 0, 0.74, 0), BackgroundColor3 = C.Panel, BorderSizePixel = 0, Visible = false }, GUI)
 local hubConstraint = Instance.new("UISizeConstraint"); hubConstraint.MinSize = Vector2.new(300, 370); hubConstraint.MaxSize = Vector2.new(640, 590); hubConstraint.Parent = Hub
 UI.Round(Hub, 11); UI.Stroke(Hub, C.Blue, 0.05)
-
-local StarContainer = create("Frame", { Name = "StarContainer", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 0 }, Hub)
-local HubStars = {}
-for i = 1, 40 do
-    local star = create("Frame", { Size = UDim2.fromOffset(math.random(1, 3), math.random(1, 3)), Position = UDim2.new(math.random(), 0, math.random(), 0), BackgroundColor3 = C.Text, BorderSizePixel = 0, ZIndex = 0 }, StarContainer)
-    UI.Round(star, 5)
-    table.insert(HubStars, { frame = star, speed = math.random(15, 40) / 1000, offset = math.random(1, 100) })
-end
 
 local Header = create("TextButton", { Name = "DragHeader", Active = true, AutoButtonColor = false, Position = UDim2.new(0, 12, 0, 7), Size = UDim2.new(1, -92, 0, 28), BackgroundTransparency = 1, Text = Title, TextColor3 = C.Text, TextSize = 17, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd }, Hub)
 local Minimize = create("TextButton", { Position = UDim2.new(1, -42, 0, 8), Size = UDim2.fromOffset(30, 28), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0, Text = "×", TextColor3 = C.Text, TextSize = 19, Font = Enum.Font.GothamBold }, Hub)
@@ -319,25 +301,19 @@ UI.Round(PageHost, 7); UI.Stroke(PageHost, C.Blue, 0.55)
 local Status = create("TextLabel", { Position = UDim2.new(0, 12, 1, -25), Size = UDim2.new(1, -24, 0, 17), BackgroundTransparency = 1, Text = "Status: Ready", TextColor3 = C.Muted, TextSize = 9, Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd }, Hub)
 ENV.__EPIC_PLANETS_STATUS = Status
 
-----------------------------------------------------------------
--- MINI CONTAINER (EP ICON + EFEITOS)
-----------------------------------------------------------------
-local MiniContainer = create("Frame", { Name = "EP_MiniContainer", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0, 35, 0.5, 0), Size = UDim2.fromOffset(50, 50), BackgroundTransparency = 1, Visible = false, ZIndex = 100 }, GUI)
-local MiniBlur = create("Frame", { Size = UDim2.fromOffset(50, 50), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = Color3.fromRGB(0, 0, 0), BackgroundTransparency = 0.5, ZIndex = 99 }, MiniContainer)
-UI.Round(MiniBlur, 15)
-local BlurStroke = UI.Stroke(MiniBlur, C.Red, 0.5); BlurStroke.Thickness = 2
-local Mini = create("TextButton", { Name = "EP_MiniIcon", Size = UDim2.fromOffset(42, 42), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = C.Background, BorderSizePixel = 0, Text = "EP", TextColor3 = C.Text, TextSize = 13, Font = Enum.Font.GothamBlack, ZIndex = 101 }, MiniContainer)
+-- ✅ MINI ICON COM EFEITOS
+local Mini = create("TextButton", { Name = "EP_MiniIcon", AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 12, 0.56, 0), Size = UDim2.fromOffset(42, 42), BackgroundColor3 = C.Background, BorderSizePixel = 0, Text = "EP", TextColor3 = C.Text, TextSize = 13, Font = Enum.Font.GothamBlack, Visible = false, ZIndex = 100 }, GUI)
 UI.Round(Mini, 10)
 local MiniStroke = UI.Stroke(Mini, C.Blue, 0.02)
 
 local function spawnMiniSpark()
-    if not MiniContainer.Visible then return end
-    local spark = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4)), BackgroundColor3 = C.Text, BorderSizePixel = 0, ZIndex = 102 }, MiniContainer)
+    if not Mini.Visible then return end
+    local spark = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(math.random(2, 4), math.random(2, 4)), BackgroundColor3 = C.Text, BorderSizePixel = 0, ZIndex = 102 }, Mini)
     UI.Round(spark, 5)
     local angle = math.random() * math.pi * 2
-    local distance = math.random(35, 55)
-    local targetX = 0.5 + math.cos(angle) * (distance / 50)
-    local targetY = 0.5 + math.sin(angle) * (distance / 50)
+    local distance = math.random(25, 45)
+    local targetX = 0.5 + math.cos(angle) * (distance / 42)
+    local targetY = 0.5 + math.sin(angle) * (distance / 42)
     tween(spark, 0.5, { Position = UDim2.fromScale(targetX, targetY), BackgroundTransparency = 1, Size = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Quad)
     task.delay(0.5, function() if spark then spark:Destroy() end end)
 end
@@ -381,14 +357,16 @@ local TetrisPage = makePage("Tetris")
 addTab("Home", "HOME", 1); addTab("Player", "PLAYER", 2); addTab("BuiltinModules", "BUILTINS", 3); addTab("Movesets", "MOVESETS", 4); addTab("Models", "MODEL STORE", 5); addTab("Settings", "SETTINGS", 6); addTab("Personalization", "PERSONAL", 7); addTab("ScriptBlox", "SCRIPTBLOX", 8); addTab("Logs", "LOGS", 9); addTab("Executor", "EXECUTOR", 10); addTab("Tetris", "TETRIS", 11)
 
 ----------------------------------------------------------------
--- SCRIPTBLOX STORE & LOGS & EXECUTOR
+-- SCRIPTBLOX, LOGS, EXECUTOR, PERSONALIZATION (MANTIDOS)
 ----------------------------------------------------------------
 local ScriptBloxBase = "https://scriptblox.com"
 local ScriptResultCards = {}
 local storeQuery, storePage, storeRequestId, storeBusy, storeStrictMatch = "", 1, 0, false, false
+
 UI.Label(ScriptBloxPage, "SCRIPTBLOX STORE", 29, 14, C.Text).Font = Enum.Font.GothamBlack
 info(ScriptBloxPage, "Search community scripts. Review source before using it.", 55, C.Muted)
 info(ScriptBloxPage, "Powered by ScriptBlox.com", 22, C.Blue)
+
 local StoreSearchBox = create("TextBox", { Name = "ScriptBloxSearchBox", Size = UDim2.new(1, -4, 0, 38), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0, ClearTextOnFocus = false, PlaceholderText = "Search scripts...", PlaceholderColor3 = C.Muted, Text = "", TextColor3 = C.Text, TextSize = 12, Font = Enum.Font.Gotham, TextXAlignment = Enum.TextXAlignment.Left }, ScriptBloxPage)
 UI.Round(StoreSearchBox, 7); UI.Stroke(StoreSearchBox, C.Blue, 0.45)
 local StoreStatus = UI.Label(ScriptBloxPage, "Enter a search term or tap TRENDING.", 30, 10, C.Muted)
@@ -438,7 +416,7 @@ UI.Button(ScriptBloxPage, "SEARCH SCRIPTS", function()
 end)
 UI.Button(ScriptBloxPage, "TRENDING SCRIPTS", function() fetchScriptBlox(ScriptBloxBase .. "/api/script/trending?max=10", false, "Loading trending...") end)
 
--- LOGS
+-- LOGS & EXECUTOR (Simplificados)
 UI.Label(LogsPage, "RUNTIME LOGS", 29, 14, C.Text).Font = Enum.Font.GothamBlack
 info(LogsPage, "Shows status changes and errors.", 43, C.Muted)
 local LogsOutput
@@ -454,7 +432,6 @@ UI.Button(LogsPage, "CLEAR LOGS", function() table.clear(RuntimeLogs) refreshLog
 LogsOutput = UI.Label(LogsPage, "No log entries yet.", 40, 10, C.Text); LogsOutput.Size = UDim2.new(1, -4, 0, 0); LogsOutput.AutomaticSize = Enum.AutomaticSize.Y; LogsOutput.TextXAlignment = Enum.TextXAlignment.Left; LogsOutput.TextYAlignment = Enum.TextYAlignment.Top; LogsOutput.Font = Enum.Font.Code
 refreshLogsPage()
 
--- EXECUTOR
 UI.Label(ExecutorPage, "EXECUTOR HUB", 29, 14, C.Text).Font = Enum.Font.GothamBlack
 info(ExecutorPage, "Editor and console for code you trust.", 48, C.Muted)
 local ExecutorEditor = create("TextBox", { Size = UDim2.new(1, -4, 0, 190), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0, ClearTextOnFocus = false, MultiLine = true, Text = "-- EPIC PLANETS editor\nprint('Hello from EPIC PLANETS')", TextColor3 = C.Text, PlaceholderText = "Write Luau here...", PlaceholderColor3 = C.Muted, TextSize = 11, Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, TextWrapped = false }, ExecutorPage)
@@ -474,9 +451,7 @@ UI.Button(ExecutorPage, "EXECUTE EDITOR CODE", function()
 end, 36)
 UI.Button(ExecutorPage, "CLEAR EDITOR", function() ExecutorEditor.Text = "" end, 32)
 
-----------------------------------------------------------------
--- PERSONALIZATION, HOME, PLAYER, ETC.
-----------------------------------------------------------------
+-- PERSONALIZATION
 local MusicTracks = {
     ["DM iostesso"] = { URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/dm_iostesso.ft2.mp3", File = "EpicPlanets/EP_Music_DM_iostesso.mp3" },
     ["Screenrecorder"] = { URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Screenrecorder-2026-09-18-20-34-50-385.mp3", File = "EpicPlanets/Screenrecorder-2026-09-18-20-34-50-385.mp3" },
@@ -564,7 +539,7 @@ info(HomePage, "Player: " .. Player.Name, 24, C.Text)
 info(HomePage, "Place ID: " .. tostring(game.PlaceId), 24)
 info(HomePage, "BuiltinModules: " .. BuiltinModules.Version, 24, C.Blue)
 UI.Button(HomePage, "OPEN BUILTINMODULES", function() showPage("BuiltinModules") end)
-UI.Button(HomePage, "MINIMIZE TO EP ICON", function() Hub.Visible = false MiniContainer.Visible = true updateGameBlur(false) end)
+UI.Button(HomePage, "MINIMIZE TO EP ICON", function() Hub.Visible = false Mini.Visible = true end)
 
 UI.Label(PlayerPage, "PLAYER CONTROLS", 27, 14, C.Text).Font = Enum.Font.GothamBold
 info(PlayerPage, "Client-side movement controls.", 44)
@@ -645,25 +620,29 @@ UI.Button(SettingsPage, "RANDOMIZE TITLE", function()
     Header.Text = Title; IntroTitle.Text = Title
 end)
 UI.Button(SettingsPage, "TOGGLE FLASH AUDIO", function(btn) BuiltinModules.Settings.FlashAudio = not BuiltinModules.Settings.FlashAudio; btn.Text = BuiltinModules.Settings.FlashAudio and "FLASH AUDIO: ON" or "FLASH AUDIO: OFF" end)
+UI.Button(SettingsPage, "MINIMIZE WINDOW", function() Hub.Visible = false Mini.Visible = true end)
 
 ----------------------------------------------------------------
--- WINDOW CONTROLS & DRAG
+-- WINDOW CONTROLS (✨ BACK EASING E SPARKS)
 ----------------------------------------------------------------
-connect(Minimize.Activated, function() Hub.Visible = false; MiniContainer.Visible = true; updateGameBlur(false) end)
+connect(Minimize.Activated, function() Hub.Visible = false; Mini.Visible = true end)
+
 connect(Mini.Activated, function()
-    MiniContainer.Visible = false; Hub.Visible = true
-    Hub.Size = UDim2.new(0.7, 0, 0.55, 0); Hub.BackgroundTransparency = 1
+    Mini.Visible = false
+    Hub.Visible = true
+    Hub.Size = UDim2.new(0.7, 0, 0.55, 0)
+    Hub.BackgroundTransparency = 1
     tween(Hub, 0.45, { Size = UDim2.new(0.91, 0, 0.74, 0), BackgroundTransparency = 0 }, Enum.EasingStyle.Back)
-    updateGameBlur(true)
 end)
+
 connect(TapIn.Activated, function()
     IntroStatus.Text = "SYSTEMS READY"
     tween(IntroPanel, 0.22, { BackgroundTransparency = 1, Position = UDim2.fromScale(0.5, 0.48) })
     task.wait(0.23)
     Intro.Visible = false; Hub.Visible = true
     Hub.Size = UDim2.new(0.84, 0, 0.68, 0); Hub.BackgroundTransparency = 1
-    tween(Hub, 0.28, { Size = UDim2.new(0.91, 0, 0.74, 0), BackgroundTransparency = 0 }, Enum.EasingStyle.Back)
-    showPage("Home"); updateGameBlur(true)
+    tween(Hub, 0.35, { Size = UDim2.new(0.91, 0, 0.74, 0), BackgroundTransparency = 0 }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    showPage("Home")
 end)
 
 local dragging = false; local dragStart, startPosition, activeTouch, dragInput
@@ -696,22 +675,6 @@ end)
 connect(UserInputService.InputEnded, function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then stopDragging()
     elseif activeTouch and input == activeTouch then stopDragging() end
-end)
-
-local draggingMini = false; local miniDragStart, miniStartPos
-connect(Mini.InputBegan, function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        draggingMini = true; miniDragStart = input.Position; miniStartPos = MiniContainer.Position
-    end
-end)
-connect(UserInputService.InputChanged, function(input)
-    if draggingMini and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - miniDragStart
-        MiniContainer.Position = UDim2.new(miniStartPos.X.Scale, miniStartPos.X.Offset + delta.X, miniStartPos.Y.Scale, miniStartPos.Y.Offset + delta.Y)
-    end
-end)
-connect(UserInputService.InputEnded, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then draggingMini = false end
 end)
 
 ----------------------------------------------------------------
@@ -750,10 +713,16 @@ local rainbowObjects = {}
 for _, object in ipairs(GUI:GetDescendants()) do if object:IsA("UIStroke") then table.insert(rainbowObjects, object) end end
 
 connect(RunService.RenderStepped, function()
-    local now = os.clock(); local hue = (now * 0.12) % 1
+    local now = os.clock(); local hue = (now * 0.15) % 1
     if BuiltinModules.Settings.Rainbow then
-        for _, stroke in ipairs(rainbowObjects) do
-            if stroke and stroke.Parent then stroke.Color = Color3.fromHSV((hue + 0.025) % 1, 0.88, 1) end
+        for index, stroke in ipairs(rainbowObjects) do
+            if stroke and stroke.Parent then
+                local offsetHue = (hue + (index * 0.004)) % 1
+                stroke.Color = Color3.fromHSV(offsetHue, 0.88, 1)
+            end
+        end
+        for index, star in ipairs(StarSparks) do
+            if star and star.Parent then star.BackgroundColor3 = Color3.fromHSV((hue + (index * 0.01)) % 1, 0.9, 1) end
         end
     end
     if Intro.Visible then
@@ -772,21 +741,28 @@ connect(RunService.RenderStepped, function()
             if camera and flyGyro and flyGyro.Parent then flyGyro.CFrame = CFrame.new(root.Position, root.Position + camera.CFrame.LookVector) end
         end
     end
-    if Hub.Visible then
-        for _, starData in ipairs(HubStars) do
-            local star = starData.frame
-            if star and star.Parent then
-                local newY = star.Position.Y.Scale + starData.speed
-                if newY > 1 then newY = 0; star.Position = UDim2.new(math.random(), 0, 0, 0)
-                else local xOscillation = math.sin(now * 2 + starData.offset) * 0.02; star.Position = UDim2.new(star.Position.X.Scale + xOscillation, 0, newY, 0) end
-                star.BackgroundColor3 = Color3.fromHSV(hue, 0.6, 1)
+    
+    -- ✅ Efeito de Faíscas no EP Icon
+    if Mini.Visible then
+        MiniStroke.Color = Color3.fromHSV(hue, 0.9, 1)
+        if math.random(1, 8) == 1 then spawnMiniSpark() end
+    end
+    
+    for i = #installedModels, 1, -1 do
+        local entry = installedModels[i]
+        if type(entry) ~= "table" or not entry.model or not entry.model.Parent then table.remove(installedModels, i)
+        else
+            local character = Player.Character; local head = character and character:FindFirstChild("Head")
+            if head and entry.center and entry.center.Parent then
+                local base = head.CFrame * CFrame.new(0, 1.15, 0)
+                entry.center.CFrame = base
+                for index, planet in ipairs(entry.planets) do
+                    local angle = now * 1.1 + (index - 1) * math.pi / 2
+                    local offset = Vector3.new(math.cos(angle) * 1.0, math.sin(angle * 1.4) * 0.18, math.sin(angle) * 1.0)
+                    planet.CFrame = CFrame.new(base.Position + offset)
+                end
             end
         end
-    end
-    if MiniContainer.Visible then
-        local rColor = Color3.fromHSV(hue, 0.9, 1)
-        MiniStroke.Color = rColor; BlurStroke.Color = rColor
-        if math.random(1, 8) == 1 then spawnMiniSpark() end
     end
 end)
 
@@ -803,34 +779,26 @@ end)
 -- TETRIS
 ----------------------------------------------------------------
 UI.Label(TetrisPage, "TETRIS", 29, 16, C.Text).Font = Enum.Font.GothamBlack
-info(TetrisPage, "Play classic Tetris in a separate window with themed music.", 44)
-info(TetrisPage, "PC: ← → move · ↑/W rotate · ↓/S soft drop · Space = hard drop", 32, C.Blue)
-info(TetrisPage, "Mobile: use the on-screen buttons", 24)
+info(TetrisPage, "Jogue Tetris clássico em uma janela separada. A música tema toca automaticamente.", 44)
+info(TetrisPage, "PC: ← → mover · ↑/W rotacionar · ↓/S descer · Espaço = hard drop", 32, C.Blue)
+info(TetrisPage, "Mobile: use os botões na tela do jogo", 24)
 
 local TetrisGUI = create("ScreenGui", { Name = "EPIC_PLANETS_TETRIS", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 1000, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Enabled = false }, PlayerGui)
 ENV.__EPIC_PLANETS_TETRIS_GUI = TetrisGUI
-local TCOLS, TROWS, TCELL = 10, 20, 18
+
+local TCOLS, TROWS, TCELL = 10, 20, 15
 local SHAPES = { I = {{0,0,0,0},{1,1,1,1},{0,0,0,0},{0,0,0,0}}, O = {{1,1},{1,1}}, T = {{0,1,0},{1,1,1},{0,0,0}}, S = {{0,1,1},{1,1,0},{0,0,0}}, Z = {{1,1,0},{0,1,1},{0,0,0}}, J = {{1,0,0},{1,1,1},{0,0,0}}, L = {{0,0,1},{1,1,1},{0,0,0}} }
 local SHAPE_COLORS = { I = Color3.fromRGB(0,240,240), O = Color3.fromRGB(240,240,0), T = Color3.fromRGB(170,0,240), S = Color3.fromRGB(0,240,0), Z = Color3.fromRGB(240,0,0), J = Color3.fromRGB(0,80,240), L = Color3.fromRGB(240,160,0) }
 
-local TWin = create("Frame", { Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(400, 580), BackgroundColor3 = C.Panel, BorderSizePixel = 0 }, TetrisGUI)
+local TWin = create("Frame", { Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(0, 330, 0, 480), BackgroundColor3 = C.Panel, BorderSizePixel = 0 }, TetrisGUI)
 UI.Round(TWin, 12); UI.Stroke(TWin, C.Purple, 0.05)
-local TScale = Instance.new("UIScale"); TScale.Parent = TWin
-local TNATIVE_W, TNATIVE_H = 400, 580
-local function updateTetrisScale()
-    local camera = Workspace.CurrentCamera; if not camera then return end
-    local vp = camera.ViewportSize
-    local sx = (vp.X * 0.92) / TNATIVE_W; local sy = (vp.Y * 0.92) / TNATIVE_H
-    local scale = math.clamp(math.min(1, sx, sy), 0.45, 1)
-    TScale.Scale = scale; TWin.Position = UDim2.new(0.5, TNATIVE_W * (1 - scale) / 2, 0.5, TNATIVE_H * (1 - scale) / 2)
-end
-updateTetrisScale()
+local tWinConstraint = Instance.new("UISizeConstraint"); tWinConstraint.MinSize = Vector2.new(280, 420); tWinConstraint.MaxSize = Vector2.new(350, 500); tWinConstraint.Parent = TWin
 
-local THeader = create("TextButton", { Active = true, AutoButtonColor = false, Position = UDim2.new(0, 12, 0, 8), Size = UDim2.new(1, -90, 0, 28), BackgroundTransparency = 1, Text = "TETRIS  ♪", TextColor3 = C.Text, TextSize = 18, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left }, TWin)
-local TClose = create("TextButton", { Position = UDim2.new(1, -42, 0, 8), Size = UDim2.fromOffset(30, 28), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0, Text = "×", TextColor3 = C.Text, TextSize = 19, Font = Enum.Font.GothamBold }, TWin)
+local THeader = create("TextButton", { Active = true, AutoButtonColor = false, Position = UDim2.new(0, 10, 0, 6), Size = UDim2.new(1, -75, 0, 26), BackgroundTransparency = 1, Text = "TETRIS  ♪", TextColor3 = C.Text, TextSize = 16, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left }, TWin)
+local TClose = create("TextButton", { Position = UDim2.new(1, -36, 0, 6), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0, Text = "×", TextColor3 = C.Text, TextSize = 17, Font = Enum.Font.GothamBold }, TWin)
 UI.Round(TClose, 6); UI.Stroke(TClose, C.Purple, 0.3)
 
-local TBoard = create("Frame", { Position = UDim2.fromOffset(15, 55), Size = UDim2.fromOffset(TCOLS * TCELL, TROWS * TCELL), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
+local TBoard = create("Frame", { Position = UDim2.fromOffset(10, 38), Size = UDim2.fromOffset(TCOLS * TCELL, TROWS * TCELL), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
 UI.Round(TBoard, 4); UI.Stroke(TBoard, C.Purple, 0.35)
 local TCells = {}
 for r = 1, TROWS do
@@ -841,11 +809,11 @@ for r = 1, TROWS do
     end
 end
 
-local TNextFrame = create("Frame", { Position = UDim2.fromOffset(210, 55), Size = UDim2.fromOffset(175, 130), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
+local TNextFrame = create("Frame", { Position = UDim2.fromOffset(170, 38), Size = UDim2.fromOffset(150, 100), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
 UI.Round(TNextFrame, 6); UI.Stroke(TNextFrame, C.Purple, 0.35)
-create("TextLabel", { Position = UDim2.new(0,0,0,4), Size = UDim2.new(1,0,0,18), BackgroundTransparency = 1, Text = "NEXT", TextColor3 = C.Muted, TextSize = 10, Font = Enum.Font.GothamBold }, TNextFrame)
-local NCELL = 20
-local TNextGrid = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 8), Size = UDim2.fromOffset(4*NCELL, 4*NCELL), BackgroundTransparency = 1 }, TNextFrame)
+create("TextLabel", { Position = UDim2.new(0,0,0,2), Size = UDim2.new(1,0,0,16), BackgroundTransparency = 1, Text = "PRÓXIMA", TextColor3 = C.Muted, TextSize = 9, Font = Enum.Font.GothamBold }, TNextFrame)
+local NCELL = 16
+local TNextGrid = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 6), Size = UDim2.fromOffset(4*NCELL, 4*NCELL), BackgroundTransparency = 1 }, TNextFrame)
 local TNextCells = {}
 for r = 1, 4 do
     TNextCells[r] = {}
@@ -855,25 +823,25 @@ for r = 1, 4 do
     end
 end
 
-local TStats = create("Frame", { Position = UDim2.fromOffset(210, 195), Size = UDim2.fromOffset(175, 130), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
+local TStats = create("Frame", { Position = UDim2.fromOffset(170, 144), Size = UDim2.fromOffset(150, 150), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
 UI.Round(TStats, 6); UI.Stroke(TStats, C.Purple, 0.35)
 local function makeStat(parent, order, label)
-    create("TextLabel", { Position = UDim2.new(0,8,0,order), Size = UDim2.new(1,-16,0,20), BackgroundTransparency = 1, Text = label, TextColor3 = C.Muted, TextSize = 11, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left }, parent)
-    return create("TextLabel", { Position = UDim2.new(0,8,0,order), Size = UDim2.new(1,-16,0,20), BackgroundTransparency = 1, Text = "0", TextColor3 = C.Text, TextSize = 13, Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Right }, parent)
+    create("TextLabel", { Position = UDim2.new(0,6,0,order), Size = UDim2.new(1,-12,0,18), BackgroundTransparency = 1, Text = label, TextColor3 = C.Muted, TextSize = 10, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left }, parent)
+    return create("TextLabel", { Position = UDim2.new(0,6,0,order), Size = UDim2.new(1,-12,0,18), BackgroundTransparency = 1, Text = "0", TextColor3 = C.Text, TextSize = 11, Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Right }, parent)
 end
-local TScoreLbl = makeStat(TStats, 4, "SCORE"); local TLinesLbl = makeStat(TStats, 30, "LINES"); local TLevelLbl = makeStat(TStats, 56, "LEVEL"); local TBestLbl  = makeStat(TStats, 82, "BEST")
+local TScoreLbl = makeStat(TStats, 4, "PONTOS"); local TLinesLbl = makeStat(TStats, 40, "LINHAS"); local TLevelLbl = makeStat(TStats, 76, "NÍVEL"); local TBestLbl  = makeStat(TStats, 112, "RECORDE")
 
-local TCtrl = create("Frame", { Position = UDim2.fromOffset(15, 430), Size = UDim2.new(1, -30, 0, 130), BackgroundTransparency = 1 }, TWin)
+local TCtrl = create("Frame", { Position = UDim2.fromOffset(10, 345), Size = UDim2.new(1, -20, 0, 120), BackgroundTransparency = 1 }, TWin)
 local function tbtn(x, y, w, h, txt, col)
-    local b = create("TextButton", { Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h), BackgroundColor3 = col or C.PanelAlt, BorderSizePixel = 0, Text = txt, TextColor3 = C.Text, TextSize = 18, Font = Enum.Font.GothamBlack }, TCtrl)
-    UI.Round(b, 8); UI.Stroke(b, C.Purple, 0.4); return b
+    local b = create("TextButton", { Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h), BackgroundColor3 = col or C.PanelAlt, BorderSizePixel = 0, Text = txt, TextColor3 = C.Text, TextSize = 16, Font = Enum.Font.GothamBlack }, TCtrl)
+    UI.Round(b, 7); UI.Stroke(b, C.Purple, 0.4); return b
 end
-local BtnLeft  = tbtn(0, 40, 60, 55, "◀"); local BtnDown  = tbtn(65, 40, 60, 55, "▼"); local BtnRight = tbtn(130, 40, 60, 55, "▶"); local BtnRot   = tbtn(200, 40, 60, 55, "↻", C.Blue); local BtnDrop  = tbtn(265, 40, 55, 55, "⤓", C.Purple)
+local BtnLeft  = tbtn(0, 32, 50, 44, "◀"); local BtnDown  = tbtn(55, 32, 50, 44, "▼"); local BtnRight = tbtn(110, 32, 50, 44, "▶"); local BtnRot   = tbtn(165, 32, 50, 44, "↻", C.Blue); local BtnDrop  = tbtn(220, 32, 85, 44, "⤓ DROP", C.Purple)
 
-local GameOverOverlay = create("Frame", { Position = UDim2.fromOffset(15, 55), Size = UDim2.fromOffset(TCOLS*TCELL, TROWS*TCELL), BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.35, Visible = false, ZIndex = 5 }, TWin)
+local GameOverOverlay = create("Frame", { Position = UDim2.fromOffset(10, 38), Size = UDim2.fromOffset(TCOLS*TCELL, TROWS*TCELL), BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.35, Visible = false, ZIndex = 5 }, TWin)
 UI.Round(GameOverOverlay, 4)
-create("TextLabel", { Position = UDim2.new(0,0,0.35,0), Size = UDim2.new(1,0,0,36), BackgroundTransparency = 1, Text = "GAME OVER", TextColor3 = C.Red, TextSize = 22, Font = Enum.Font.GothamBlack }, GameOverOverlay)
-local RestartBtn = create("TextButton", { AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.fromScale(0.5, 0.6), Size = UDim2.fromOffset(120, 36), BackgroundColor3 = C.Blue, BorderSizePixel = 0, Text = "RESTART", TextColor3 = C.Text, TextSize = 13, Font = Enum.Font.GothamBold, ZIndex = 6 }, GameOverOverlay)
+create("TextLabel", { Position = UDim2.new(0,0,0.35,0), Size = UDim2.new(1,0,0,30), BackgroundTransparency = 1, Text = "GAME OVER", TextColor3 = C.Red, TextSize = 18, Font = Enum.Font.GothamBlack }, GameOverOverlay)
+local RestartBtn = create("TextButton", { AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.fromScale(0.5, 0.6), Size = UDim2.fromOffset(100, 32), BackgroundColor3 = C.Blue, BorderSizePixel = 0, Text = "REINICIAR", TextColor3 = C.Text, TextSize = 12, Font = Enum.Font.GothamBold, ZIndex = 6 }, GameOverOverlay)
 UI.Round(RestartBtn, 6)
 
 local board, curPiece, nxtPiece; local running, over = false, false; local score, lines, level, best = 0, 0, 1, 0; local dropAcc, dropInt = 0, 0.8; local gameConn
@@ -898,7 +866,7 @@ local function moveLeft() if curPiece and fits(curPiece.shape, curPiece.x - 1, c
 local function moveRight() if curPiece and fits(curPiece.shape, curPiece.x + 1, curPiece.y) then curPiece.x += 1 end end
 local function rotatePiece() if not curPiece then return end; local rot = rotateMatrix(curPiece.shape); if fits(rot, curPiece.x, curPiece.y) then curPiece.shape = rot end end
 local function hardDrop() if not curPiece then return end; while fits(curPiece.shape, curPiece.x, curPiece.y + 1) do curPiece.y += 1 end; lockPiece() end
-local function renderTetris()
+local function render()
     for r = 1, TROWS do for c = 1, TCOLS do local cell = TCells[r][c]; if board[r][c] then cell.BackgroundColor3 = board[r][c]; cell.BackgroundTransparency = 0 else cell.BackgroundColor3 = C.PanelAlt; cell.BackgroundTransparency = 0.75 end end end
     if curPiece then for py = 1, #curPiece.shape do for px = 1, #curPiece.shape[py] do if curPiece.shape[py][px] == 1 then local bx, by = curPiece.x + px - 1, curPiece.y + py - 1; if bx >= 1 and bx <= TCOLS and by >= 1 and by <= TROWS then TCells[by][bx].BackgroundColor3 = SHAPE_COLORS[curPiece.name]; TCells[by][bx].BackgroundTransparency = 0 end end end end end
     for r = 1, 4 do for c = 1, 4 do TNextCells[r][c].BackgroundTransparency = 1 end end
@@ -906,15 +874,15 @@ local function renderTetris()
     TScoreLbl.Text = tostring(score); TLinesLbl.Text = tostring(lines); TLevelLbl.Text = tostring(level); TBestLbl.Text  = tostring(best)
 end
 local lastTick = 0
-local function startGame() initBoard(); curPiece = randomPiece(); nxtPiece = randomPiece(); score, lines, level = 0, 0, 1; dropInt = 0.8; dropAcc = 0; over = false; running = true; GameOverOverlay.Visible = false; lastTick = os.clock(); renderTetris() end
+local function startGame() initBoard(); curPiece = randomPiece(); nxtPiece = randomPiece(); score, lines, level = 0, 0, 1; dropInt = 0.8; dropAcc = 0; over = false; running = true; GameOverOverlay.Visible = false; lastTick = os.clock(); render() end
 if gameConn then gameConn:Disconnect() end
-gameConn = RunService.Heartbeat:Connect(function() if not running or over then return end; local now = os.clock(); dropAcc += (now - lastTick); lastTick = now; if dropAcc >= dropInt then dropAcc = 0; moveDown() end; renderTetris() end)
+gameConn = RunService.Heartbeat:Connect(function() if not running or over then return end; local now = os.clock(); dropAcc += (now - lastTick); lastTick = now; if dropAcc >= dropInt then dropAcc = 0; moveDown() end; render() end)
 table.insert(Connections, gameConn)
 
-local function openTetris() TetrisGUI.Enabled = true; updateTetrisScale(); if not running then startGame() end; stopPersonalMusic(); task.spawn(function() playPersonalMusic("Tetris Theme", true) end) end
+local function openTetris() TetrisGUI.Enabled = true; if not running then startGame() end; stopPersonalMusic(); task.spawn(function() playPersonalMusic("Tetris Theme", true) end) end
 local function closeTetris() TetrisGUI.Enabled = false; running = false; stopPersonalMusic(); if selectedMusic and selectedMusic ~= "None" then task.spawn(function() playPersonalMusic(selectedMusic, false) end) end end
-UI.Button(TetrisPage, "🎮  OPEN TETRIS GAME", function() openTetris() end, 50)
-UI.Button(HomePage, "🎮  PLAY TETRIS", function() openTetris() end, 42)
+UI.Button(TetrisPage, "🎮  ABRIR JOGO DO TETRIS", function() openTetris() end, 50)
+UI.Button(HomePage, "🎮  JOGAR TETRIS", function() openTetris() end, 42)
 connect(TClose.Activated, closeTetris); connect(RestartBtn.Activated, function() startGame() end)
 
 local function holdBtn(btn, action)
@@ -939,7 +907,7 @@ connect(UserInputService.InputEnded, function(input) if input.UserInputType == E
 task.spawn(function() preparePersonalAudio("Music", "Tetris Theme") end)
 
 ----------------------------------------------------------------
--- CREDITS
+-- CREDITS (Adicionado de forma segura)
 ----------------------------------------------------------------
 local function fetchRobloxUser(username)
     local ok, response = pcall(function() return HttpService:PostAsync("https://users.roblox.com/v1/usernames/users", HttpService:JSONEncode({ usernames = { username } }), Enum.HttpContentType.ApplicationJson) end)
@@ -952,6 +920,7 @@ local function fetchRobloxUser(username)
     if thumbOk and type(thumbResponse) == "string" then local thumbDecodeOk, thumbData = pcall(function() return HttpService:JSONDecode(thumbResponse) end); if thumbDecodeOk and thumbData.data and #thumbData.data > 0 then avatarUrl = thumbData.data[1].imageUrl end end
     return { id = userId, username = user.name, displayName = displayName, avatar = avatarUrl }
 end
+
 local CREDITS_DIRECTION = "down"; local CREDITS_SPEED = 30
 local SponsorsData = { { username = "catblue", role = "Sponsor" }, { username = "sorvetepro", role = "Sponsor" } }
 local AdminsData = { { username = "sorvetepro", role = "Administrator / Creator" } }
@@ -1028,7 +997,7 @@ end)
 ----------------------------------------------------------------
 BuiltinModules.Initialized = true
 ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
-addLog("INFO", "EPIC PLANETS initialized; Mini Effects + Game Blur + Back Animation registered")
+addLog("INFO", "EPIC PLANETS initialized (Clean UI + Credits + Sparks)")
 refreshLogsPage(); showPage("Home"); setStatus("Loading intro")
 
 print("[EPIC PLANETS] Main.lua loaded.")
