@@ -1,6 +1,6 @@
 --[[
     EPIC PLANETS
-    Main.lua + BuiltinModules + Clean UI (Zero Blur) + Responsive Tetris + Back Easing + Credits + Sparks
+    Main.lua + BuiltinModules + Clean UI (Zero Blur) + Compact Tetris + Back Easing + Credits + Sparks
     Delta / Android
 ]]
 
@@ -776,7 +776,7 @@ connect(Player.CharacterAdded, function()
 end)
 
 ----------------------------------------------------------------
--- TETRIS
+-- TETRIS (COMPACTO E AJUSTADO)
 ----------------------------------------------------------------
 UI.Label(TetrisPage, "TETRIS", 29, 16, C.Text).Font = Enum.Font.GothamBlack
 info(TetrisPage, "Jogue Tetris clássico em uma janela separada. A música tema toca automaticamente.", 44)
@@ -786,32 +786,16 @@ info(TetrisPage, "Mobile: use os botões na tela do jogo", 24)
 local TetrisGUI = create("ScreenGui", { Name = "EPIC_PLANETS_TETRIS", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 1000, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Enabled = false }, PlayerGui)
 ENV.__EPIC_PLANETS_TETRIS_GUI = TetrisGUI
 
-local TCOLS, TROWS, TCELL = 10, 20, 15
+-- ✅ TAMANHO REDUZIDO
+local TCOLS, TROWS, TCELL = 10, 20, 13
 local SHAPES = { I = {{0,0,0,0},{1,1,1,1},{0,0,0,0},{0,0,0,0}}, O = {{1,1},{1,1}}, T = {{0,1,0},{1,1,1},{0,0,0}}, S = {{0,1,1},{1,1,0},{0,0,0}}, Z = {{1,1,0},{0,1,1},{0,0,0}}, J = {{1,0,0},{1,1,1},{0,0,0}}, L = {{0,0,1},{1,1,1},{0,0,0}} }
 local SHAPE_COLORS = { I = Color3.fromRGB(0,240,240), O = Color3.fromRGB(240,240,0), T = Color3.fromRGB(170,0,240), S = Color3.fromRGB(0,240,0), Z = Color3.fromRGB(240,0,0), J = Color3.fromRGB(0,80,240), L = Color3.fromRGB(240,160,0) }
 
-local TWin = create("Frame", { Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(0, 330, 0, 480), BackgroundColor3 = C.Panel, BorderSizePixel = 0 }, TetrisGUI)
+local TWin = create("Frame", { Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(0, 280, 0, 420), BackgroundColor3 = C.Panel, BorderSizePixel = 0 }, TetrisGUI)
 UI.Round(TWin, 12); UI.Stroke(TWin, C.Purple, 0.05)
-local tWinConstraint = Instance.new("UISizeConstraint"); tWinConstraint.MinSize = Vector2.new(280, 420); tWinConstraint.MaxSize = Vector2.new(350, 500); tWinConstraint.Parent = TWin
 
--- ✅ CORREÇÃO PARA NÃO ULTRAPASSAR A TELA
-local TScale = Instance.new("UIScale")
-TScale.Parent = TWin
-
-local function updateTetrisScale()
-    local camera = Workspace.CurrentCamera
-    if not camera then return end
-    local vp = camera.ViewportSize
-    local sx = (vp.X * 0.92) / 330
-    local sy = (vp.Y * 0.92) / 480
-    local scale = math.clamp(math.min(1, sx, sy), 0.4, 1)
-    TScale.Scale = scale
-end
-
-updateTetrisScale()
-
-local THeader = create("TextButton", { Active = true, AutoButtonColor = false, Position = UDim2.new(0, 10, 0, 6), Size = UDim2.new(1, -75, 0, 26), BackgroundTransparency = 1, Text = "TETRIS  ♪", TextColor3 = C.Text, TextSize = 16, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left }, TWin)
-local TClose = create("TextButton", { Position = UDim2.new(1, -36, 0, 6), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0, Text = "×", TextColor3 = C.Text, TextSize = 17, Font = Enum.Font.GothamBold }, TWin)
+local THeader = create("TextButton", { Active = true, AutoButtonColor = false, Position = UDim2.new(0, 10, 0, 6), Size = UDim2.new(1, -60, 0, 26), BackgroundTransparency = 1, Text = "TETRIS  ♪", TextColor3 = C.Text, TextSize = 16, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left }, TWin)
+local TClose = create("TextButton", { Position = UDim2.new(1, -34, 0, 6), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0, Text = "×", TextColor3 = C.Text, TextSize = 17, Font = Enum.Font.GothamBold }, TWin)
 UI.Round(TClose, 6); UI.Stroke(TClose, C.Purple, 0.3)
 
 local TBoard = create("Frame", { Position = UDim2.fromOffset(10, 38), Size = UDim2.fromOffset(TCOLS * TCELL, TROWS * TCELL), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
@@ -825,10 +809,10 @@ for r = 1, TROWS do
     end
 end
 
-local TNextFrame = create("Frame", { Position = UDim2.fromOffset(170, 38), Size = UDim2.fromOffset(150, 100), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
+local TNextFrame = create("Frame", { Position = UDim2.fromOffset(150, 38), Size = UDim2.fromOffset(120, 90), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
 UI.Round(TNextFrame, 6); UI.Stroke(TNextFrame, C.Purple, 0.35)
 create("TextLabel", { Position = UDim2.new(0,0,0,2), Size = UDim2.new(1,0,0,16), BackgroundTransparency = 1, Text = "PRÓXIMA", TextColor3 = C.Muted, TextSize = 9, Font = Enum.Font.GothamBold }, TNextFrame)
-local NCELL = 16
+local NCELL = 12
 local TNextGrid = create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 6), Size = UDim2.fromOffset(4*NCELL, 4*NCELL), BackgroundTransparency = 1 }, TNextFrame)
 local TNextCells = {}
 for r = 1, 4 do
@@ -839,7 +823,7 @@ for r = 1, 4 do
     end
 end
 
-local TStats = create("Frame", { Position = UDim2.fromOffset(170, 144), Size = UDim2.fromOffset(150, 150), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
+local TStats = create("Frame", { Position = UDim2.fromOffset(150, 132), Size = UDim2.fromOffset(120, 140), BackgroundColor3 = C.Background, BorderSizePixel = 0 }, TWin)
 UI.Round(TStats, 6); UI.Stroke(TStats, C.Purple, 0.35)
 local function makeStat(parent, order, label)
     create("TextLabel", { Position = UDim2.new(0,6,0,order), Size = UDim2.new(1,-12,0,18), BackgroundTransparency = 1, Text = label, TextColor3 = C.Muted, TextSize = 10, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left }, parent)
@@ -847,12 +831,12 @@ local function makeStat(parent, order, label)
 end
 local TScoreLbl = makeStat(TStats, 4, "PONTOS"); local TLinesLbl = makeStat(TStats, 40, "LINHAS"); local TLevelLbl = makeStat(TStats, 76, "NÍVEL"); local TBestLbl  = makeStat(TStats, 112, "RECORDE")
 
-local TCtrl = create("Frame", { Position = UDim2.fromOffset(10, 345), Size = UDim2.new(1, -20, 0, 120), BackgroundTransparency = 1 }, TWin)
+local TCtrl = create("Frame", { Position = UDim2.fromOffset(10, 305), Size = UDim2.new(1, -20, 0, 100), BackgroundTransparency = 1 }, TWin)
 local function tbtn(x, y, w, h, txt, col)
-    local b = create("TextButton", { Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h), BackgroundColor3 = col or C.PanelAlt, BorderSizePixel = 0, Text = txt, TextColor3 = C.Text, TextSize = 16, Font = Enum.Font.GothamBlack }, TCtrl)
+    local b = create("TextButton", { Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h), BackgroundColor3 = col or C.PanelAlt, BorderSizePixel = 0, Text = txt, TextColor3 = C.Text, TextSize = 14, Font = Enum.Font.GothamBlack }, TCtrl)
     UI.Round(b, 7); UI.Stroke(b, C.Purple, 0.4); return b
 end
-local BtnLeft  = tbtn(0, 32, 50, 44, "◀"); local BtnDown  = tbtn(55, 32, 50, 44, "▼"); local BtnRight = tbtn(110, 32, 50, 44, "▶"); local BtnRot   = tbtn(165, 32, 50, 44, "↻", C.Blue); local BtnDrop  = tbtn(220, 32, 85, 44, "⤓ DROP", C.Purple)
+local BtnLeft  = tbtn(0, 0, 45, 45, "◀"); local BtnDown  = tbtn(50, 0, 45, 45, "▼"); local BtnRight = tbtn(100, 0, 45, 45, "▶"); local BtnRot   = tbtn(150, 0, 45, 45, "↻", C.Blue); local BtnDrop  = tbtn(200, 0, 50, 45, "⤓", C.Purple)
 
 local GameOverOverlay = create("Frame", { Position = UDim2.fromOffset(10, 38), Size = UDim2.fromOffset(TCOLS*TCELL, TROWS*TCELL), BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.35, Visible = false, ZIndex = 5 }, TWin)
 UI.Round(GameOverOverlay, 4)
@@ -895,7 +879,7 @@ if gameConn then gameConn:Disconnect() end
 gameConn = RunService.Heartbeat:Connect(function() if not running or over then return end; local now = os.clock(); dropAcc += (now - lastTick); lastTick = now; if dropAcc >= dropInt then dropAcc = 0; moveDown() end; render() end)
 table.insert(Connections, gameConn)
 
-local function openTetris() TetrisGUI.Enabled = true; updateTetrisScale(); if not running then startGame() end; stopPersonalMusic(); task.spawn(function() playPersonalMusic("Tetris Theme", true) end) end
+local function openTetris() TetrisGUI.Enabled = true; if not running then startGame() end; stopPersonalMusic(); task.spawn(function() playPersonalMusic("Tetris Theme", true) end) end
 local function closeTetris() TetrisGUI.Enabled = false; running = false; stopPersonalMusic(); if selectedMusic and selectedMusic ~= "None" then task.spawn(function() playPersonalMusic(selectedMusic, false) end) end end
 UI.Button(TetrisPage, "🎮  ABRIR JOGO DO TETRIS", function() openTetris() end, 50)
 UI.Button(HomePage, "🎮  JOGAR TETRIS", function() openTetris() end, 42)
@@ -1013,7 +997,7 @@ end)
 ----------------------------------------------------------------
 BuiltinModules.Initialized = true
 ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
-addLog("INFO", "EPIC PLANETS initialized (Clean UI + Credits + Sparks)")
+addLog("INFO", "EPIC PLANETS initialized (Compact Tetris)")
 refreshLogsPage(); showPage("Home"); setStatus("Loading intro")
 
 print("[EPIC PLANETS] Main.lua loaded.")
