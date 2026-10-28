@@ -732,7 +732,8 @@ local function spawnMiniSpark()
             spark:Destroy()
         end
     end)
-end----------------------------------------------------------------
+end
+----------------------------------------------------------------
 -- PAGE SYSTEM
 ----------------------------------------------------------------
 local Pages = {}
@@ -1152,7 +1153,8 @@ if flashSound then print("[EPIC PLANETS AUDIO] Ready.") else addLog("WARN", "Aud
 task.spawn(function()
     local ok, err = pcall(function() BuiltinModules.Animations.PlayIntro() end)
     if not ok then addLog("ERROR", "Intro error: " .. tostring(err)) end
-end)----------------------------------------------------------------
+end)
+----------------------------------------------------------------
 -- FRIENDS
 ----------------------------------------------------------------
 local FriendsPage = makePage("Friends")
@@ -1493,4 +1495,451 @@ end)
 
 UI.Button(ScriptBloxPage, "TRENDING SCRIPTS", function()
     fetchScriptBlox(ScriptBloxBase .. "/api/script/trending?max=10", false, "Loading trending...")
+end)
+----------------------------------------------------------------
+-- SETTINGS
+----------------------------------------------------------------
+local SettingsPage = makePage("Settings")
+addTab("Settings", "SETTINGS", 6)
+
+UI.Label(SettingsPage, "SETTINGS", 27, 14, C.Text).Font = Enum.Font.GothamBold
+info(SettingsPage, "Configure EPIC PLANETS.", 36)
+
+UI.Button(SettingsPage, "RANDOMIZE TITLE", function()
+    local old = Title
+    repeat
+        Title = BuiltinModules.Titles[math.random(1, #BuiltinModules.Titles)]
+    until #BuiltinModules.Titles == 1 or Title ~= old
+    
+    Header.Text = Title
+    IntroTitle.Text = Title
+end)
+
+UI.Button(SettingsPage, "TOGGLE FLASH AUDIO", function(btn)
+    BuiltinModules.Settings.FlashAudio = not BuiltinModules.Settings.FlashAudio
+    btn.Text = BuiltinModules.Settings.FlashAudio and "FLASH AUDIO: ON" or "FLASH AUDIO: OFF"
+end)
+
+UI.Button(SettingsPage, "MINIMIZE WINDOW", function()
+    Hub.Visible = false
+    Mini.Visible = true
+end)
+
+
+----------------------------------------------------------------
+-- CREDITS
+----------------------------------------------------------------
+local CreditsPage = makePage("Credits")
+addTab("Credits", "CREDITS", 7)
+
+local function fetchRobloxUser(username)
+    local ok, response = pcall(function()
+        return HttpService:PostAsync(
+            "https://users.roblox.com/v1/usernames/users",
+            HttpService:JSONEncode({ usernames = { username } }),
+            Enum.HttpContentType.ApplicationJson
+        )
+    end)
+    
+    if not ok or type(response) ~= "string" then return nil end
+    
+    local decodeOk, data = pcall(function() return HttpService:JSONDecode(response) end)
+    if not decodeOk or not data.data or #data.data == 0 then return nil end
+    
+    local user = data.data[1]
+    local userId = user.id
+    local displayName = user.displayName or user.name
+    
+    local thumbOk, thumbResponse = pcall(function()
+        return game:HttpGet("https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" .. tostring(userId) .. "&size=150x150&format=Png&isCircular=false")
+    end)
+    
+    local avatarUrl = nil
+    if thumbOk and type(thumbResponse) == "string" then
+        local thumbDecodeOk, thumbData = pcall(function() return HttpService:JSONDecode(thumbResponse) end)
+        if thumbDecodeOk and thumbData.data and #thumbData.data > 0 then
+            avatarUrl = thumbData.data[1].imageUrl
+        end
+    end
+    
+    return { id = userId, username = user.name, displayName = displayName, avatar = avatarUrl }
+end
+
+local CreditsScroll = create("Frame", { 
+    Size = UDim2.new(1, 0, 0, 0), 
+    AutomaticSize = Enum.AutomaticSize.Y, 
+    BackgroundTransparency = 1, 
+    Position = UDim2.new(0, 0, 0, 0) 
+}, CreditsPage)
+
+local creditsOrderBase = 0
+
+local function renderUserCard(parent, userData, roleLabel, layoutOrder)
+    local card = create("Frame", { 
+        Size = UDim2.new(1, -10, 0, 68), 
+        BackgroundColor3 = C.PanelAlt, 
+        BorderSizePixel = 0, 
+        LayoutOrder = layoutOrder 
+    }, parent)
+    
+    UI.Round(card, 8)
+    UI.Stroke(card, C.Purple, 0.5)
+    
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 5)
+    pad.PaddingBottom = UDim.new(0, 5)
+    pad.PaddingLeft = UDim.new(0, 7)
+    pad.PaddingRight = UDim.new(0, 7)
+    pad.Parent = card
+    
+    local avatarFrame = create("Frame", { 
+        Position = UDim2.fromOffset(0, 0), 
+        Size = UDim2.fromOffset(56, 56), 
+        BackgroundColor3 = C.Background, 
+        BorderSizePixel = 0 
+    }, card)
+    
+    UI.Round(avatarFrame, 6)
+    UI.Stroke(avatarFrame, C.Blue, 0.3)
+    
+    if userData.avatar then
+        local img = create("ImageLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Image = userData.avatar }, avatarFrame)
+        UI.Round(img, 6)
+    else
+        create("TextLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "?", TextColor3 = C.Muted, TextSize = 20, Font = Enum.Font.GothamBold }, avatarFrame)
+    end
+    
+    create("TextLabel", { Position = UDim2.fromOffset(66, 4), Size = UDim2.new(1, -72, 0, 22), BackgroundTransparency = 1, Text = userData.displayName or userData.username, TextColor3 = C.Text, TextSize = 13, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd }, card)
+    create("TextLabel", { Position = UDim2.fromOffset(66, 22), Size = UDim2.new(1, -72, 0, 15), BackgroundTransparency = 1, Text = "@" .. userData.username, TextColor3 = C.Muted, TextSize = 10, Font = Enum.Font.Code, TextXAlignment = Enum.TextXAlignment.Left }, card)
+    create("TextLabel", { Position = UDim2.fromOffset(66, 38), Size = UDim2.new(1, -72, 0, 18), BackgroundTransparency = 1, Text = roleLabel or "", TextColor3 = C.Purple, TextSize = 10, Font = Enum.Font.GothamBold, TextXAlignment = Enum.TextXAlignment.Left }, card)
+end
+
+local function renderCreditsCopy()
+    creditsOrderBase += 1000
+    local base = creditsOrderBase
+    
+    local copy = create("Frame", { 
+        Size = UDim2.new(1, 0, 0, 0), 
+        AutomaticSize = Enum.AutomaticSize.Y, 
+        BackgroundTransparency = 1, 
+        LayoutOrder = base 
+    }, CreditsScroll)
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 10)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.Parent = copy
+    
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 50)
+    pad.PaddingBottom = UDim.new(0, 50)
+    pad.PaddingLeft = UDim.new(0, 6)
+    pad.PaddingRight = UDim.new(0, 6)
+    pad.Parent = copy
+    
+    create("TextLabel", { Size = UDim2.new(1, 0, 0, 44), BackgroundTransparency = 1, Text = "★  EPIC PLANETS  ★", TextColor3 = C.Purple, TextSize = 22, Font = Enum.Font.GothamBlack, LayoutOrder = base + 1 }, copy)
+    create("TextLabel", { Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1, Text = "— Credits —", TextColor3 = C.Muted, TextSize = 12, Font = Enum.Font.Gotham, LayoutOrder = base + 2 }, copy)
+    create("TextLabel", { Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1, Text = "SPONSORS", TextColor3 = C.Blue, TextSize = 15, Font = Enum.Font.GothamBlack, LayoutOrder = base + 10 }, copy)
+    
+    local o = base + 20
+    local sponsors = { { username = "catblue", role = "Sponsor" }, { username = "sorvetepro", role = "Sponsor" } }
+    
+    for _, entry in ipairs(sponsors) do
+        local data = fetchRobloxUser(entry.username)
+        if data then renderUserCard(copy, data, entry.role, o) else renderUserCard(copy, { username = entry.username, displayName = entry.username }, entry.role .. " (offline)", o) end
+        o += 1
+    end
+    
+    create("TextLabel", { Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1, Text = "ADMINISTRATORS", TextColor3 = C.Red, TextSize = 15, Font = Enum.Font.GothamBlack, LayoutOrder = base + 200 }, copy)
+    
+    o = base + 210
+    local admins = { { username = "sorvetepro", role = "Administrator / Creator" } }
+    
+    for _, entry in ipairs(admins) do
+        local data = fetchRobloxUser(entry.username)
+        if data then renderUserCard(copy, data, entry.role, o) else renderUserCard(copy, { username = entry.username, displayName = entry.username }, entry.role .. " (offline)", o) end
+        o += 1
+    end
+    
+    create("TextLabel", { Size = UDim2.new(1, 0, 0, 70), BackgroundTransparency = 1, Text = "Thanks for using Epic Planets!\n♥", TextColor3 = C.Muted, TextSize = 12, Font = Enum.Font.Gotham, TextWrapped = true, LayoutOrder = base + 500 }, copy)
+    return copy
+end
+
+task.spawn(function()
+    local loadingLabel = create("TextLabel", { Size = UDim2.new(1, 0, 0, 40), Position = UDim2.new(0, 0, 0.5, -20), BackgroundTransparency = 1, Text = "Loading credits...", TextColor3 = C.Muted, TextSize = 13, Font = Enum.Font.Gotham }, CreditsPage)
+    
+    local copies = {}
+    for i = 1, 2 do
+        table.insert(copies, renderCreditsCopy())
+    end
+    
+    loadingLabel:Destroy()
+    task.wait(0.25)
+    
+    local function startLoop()
+        local copyHeight = copies[1] and copies[1].AbsoluteSize.Y or 0
+        if copyHeight <= 0 then
+            task.wait(0.4)
+            startLoop()
+            return
+        end
+        
+        local duration = copyHeight / 30 -- Velocidade de rolagem
+        
+        while CreditsPage.Parent and ENV.__EPIC_PLANETS_RUNNING do
+            local fromPos = UDim2.new(0, 0, 0, -copyHeight)
+            local toPos = UDim2.new(0, 0, 0, 0)
+            
+            CreditsScroll.Position = fromPos
+            local tw = TweenService:Create(CreditsScroll, TweenInfo.new(duration, Enum.EasingStyle.Linear), { Position = toPos })
+            tw:Play()
+            tw.Completed:Wait()
+        end
+    end
+    startLoop()
+end)
+
+
+----------------------------------------------------------------
+-- WINDOW CONTROLS (✨ BACK EASING E SPARKS)
+----------------------------------------------------------------
+connect(Minimize.Activated, function()
+    Hub.Visible = false
+    Mini.Visible = true
+end)
+
+connect(Mini.Activated, function()
+    Mini.Visible = false
+    Hub.Visible = true
+    Hub.Size = UDim2.new(0.7, 0, 0.55, 0)
+    Hub.BackgroundTransparency = 1
+    tween(Hub, 0.45, { 
+        Size = UDim2.new(0.91, 0, 0.74, 0), 
+        BackgroundTransparency = 0 
+    }, Enum.EasingStyle.Back)
+end)
+
+connect(TapIn.Activated, function()
+    IntroStatus.Text = "SYSTEMS READY"
+    tween(IntroPanel, 0.22, { 
+        BackgroundTransparency = 1, 
+        Position = UDim2.fromScale(0.5, 0.48) 
+    })
+    
+    task.wait(0.23)
+    
+    Intro.Visible = false
+    Hub.Visible = true
+    Hub.Size = UDim2.new(0.84, 0, 0.68, 0)
+    Hub.BackgroundTransparency = 1
+    
+    tween(Hub, 0.35, { 
+        Size = UDim2.new(0.91, 0, 0.74, 0), 
+        BackgroundTransparency = 0 
+    }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    
+    showPage("Home")
+end)
+
+
+----------------------------------------------------------------
+-- DRAG WINDOW
+----------------------------------------------------------------
+local dragging = false
+local dragStart, startPosition, activeTouch, dragInput
+
+local function stopDragging()
+    dragging = false
+    dragStart = nil
+    startPosition = nil
+    activeTouch = nil
+    dragInput = nil
+end
+
+local function applyDrag(input)
+    if not dragging or not dragStart or not startPosition then return end
+    
+    local camera = Workspace.CurrentCamera
+    local viewport = camera and camera.ViewportSize
+    if not viewport then return end
+    
+    local delta = input.Position - dragStart
+    local startCenterX = viewport.X * startPosition.X.Scale + startPosition.X.Offset
+    local startCenterY = viewport.Y * startPosition.Y.Scale + startPosition.Y.Offset
+    local centerX = startCenterX + delta.X
+    local centerY = startCenterY + delta.Y
+    
+    local halfW = Hub.AbsoluteSize.X / 2
+    local halfH = Hub.AbsoluteSize.Y / 2
+    local marginX, marginY = 40, 28
+    local minX, maxX, minY, maxY
+    
+    if Hub.AbsoluteSize.X <= viewport.X then minX, maxX = halfW, viewport.X - halfW else minX, maxX = marginX - halfW, viewport.X - marginX + halfW end
+    if Hub.AbsoluteSize.Y <= viewport.Y then minY, maxY = halfH, viewport.Y - halfH else minY, maxY = marginY - halfH, viewport.Y - marginY + halfH end
+    
+    centerX = math.clamp(centerX, minX, maxX)
+    centerY = math.clamp(centerY, minY, maxY)
+    
+    Hub.Position = UDim2.new(startPosition.X.Scale, centerX - viewport.X * startPosition.X.Scale, startPosition.Y.Scale, centerY - viewport.Y * startPosition.Y.Scale)
+end
+
+connect(Header.InputBegan, function(input)
+    if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+    dragging = true
+    dragStart = input.Position
+    startPosition = Hub.Position
+    activeTouch = input.UserInputType == Enum.UserInputType.Touch and input or nil
+end)
+
+connect(Header.InputChanged, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+connect(UserInputService.InputChanged, function(input)
+    if dragging and dragInput and input == dragInput then applyDrag(input)
+    elseif dragging and input.UserInputType == Enum.UserInputType.MouseMovement and activeTouch == nil then applyDrag(input) end
+end)
+
+connect(UserInputService.InputEnded, function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then stopDragging()
+    elseif activeTouch and input == activeTouch then stopDragging() end
+end)
+
+
+----------------------------------------------------------------
+-- ANIMATIONS & RENDER LOOP
+----------------------------------------------------------------
+BuiltinModules.Animations = {}
+
+function BuiltinModules.Animations.PlayIntro()
+    local total = #Fragments
+    for i, fragment in ipairs(Fragments) do
+        if not GUI.Parent then return end
+        local x = ((i - 1) % 29) / 28
+        local y = math.floor((i - 1) / 29) / 11
+        
+        tween(fragment, 0.38 + math.random() * 0.42, { Position = UDim2.fromScale(x, math.clamp(y, 0, 1)) }, Enum.EasingStyle.Quint)
+        
+        if i % 5 == 0 or i == total then
+            tween(Progress, 0.12, { Size = UDim2.new(i / total, 0, 1, 0) })
+            FragmentCount.Text = i .. " / " .. total
+        end
+        task.wait(0.002)
+    end
+    
+    task.wait(0.55)
+    IntroStatus.Text = "ALL FRAGMENTS CONNECTED"
+    for _, fragment in ipairs(Fragments) do fragment.BackgroundColor3 = C.Text end
+    BuiltinModules.Audio.PlayFlash()
+    
+    tween(IntroPanel, 0.08, { BackgroundColor3 = Color3.fromRGB(90, 95, 115) })
+    task.wait(0.1)
+    tween(IntroPanel, 0.16, { BackgroundColor3 = C.Panel })
+    
+    for _, fragment in ipairs(Fragments) do
+        tween(fragment, 1.45, { BackgroundTransparency = 1, Size = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Sine)
+    end
+    
+    tween(Progress, 1.45, { BackgroundTransparency = 1 })
+    tween(FragmentCount, 1.45, { TextTransparency = 1 })
+    task.wait(1.55)
+    
+    if not GUI.Parent then return end
+    FragmentArea.Visible = false
+    IntroStatus.Text = "ALL SYSTEMS READY"
+    TapIn.Visible = true
+    TapIn.BackgroundTransparency = 1
+    TapIn.TextTransparency = 1
+    tween(TapIn, 0.45, { BackgroundTransparency = 0, TextTransparency = 0 })
+end
+
+local rainbowObjects = {}
+for _, obj in ipairs(GUI:GetDescendants()) do
+    if obj:IsA("UIStroke") then table.insert(rainbowObjects, obj) end
+end
+
+connect(RunService.RenderStepped, function()
+    local now = os.clock()
+    local hue = (now * 0.15) % 1
+    
+    if BuiltinModules.Settings.Rainbow then
+        for index, stroke in ipairs(rainbowObjects) do
+            if stroke and stroke.Parent then
+                stroke.Color = Color3.fromHSV((hue + (index * 0.004)) % 1, 0.88, 1)
+            end
+        end
+        for index, star in ipairs(StarSparks) do
+            if star and star.Parent then
+                star.BackgroundColor3 = Color3.fromHSV((hue + (index * 0.01)) % 1, 0.9, 1)
+            end
+        end
+    end
+    
+    if Intro.Visible then
+        for i, planet in ipairs(Planets) do
+            local angle = now * (0.75 + i * 0.12) + (i - 1) * math.pi / 2
+            planet.Position = UDim2.fromOffset(75 + math.cos(angle) * 42, 54 + math.sin(angle) * 32)
+        end
+        Core.Rotation = (now * 35) % 360
+    end
+    
+    if flyEnabled then
+        local humanoid, root = getCharacterParts()
+        if not humanoid or not root or not flyVelocity or not flyVelocity.Parent then
+            setFly(false)
+        else
+            flyVelocity.Velocity = humanoid.MoveDirection * 48 + Vector3.new(0, vertical * 38, 0)
+            local camera = Workspace.CurrentCamera
+            if camera and flyGyro and flyGyro.Parent then
+                flyGyro.CFrame = CFrame.new(root.Position, root.Position + camera.CFrame.LookVector)
+            end
+        end
+    end
+    
+    if Mini.Visible then
+        MiniStroke.Color = Color3.fromHSV(hue, 0.9, 1)
+        if math.random(1, 8) == 1 then
+            spawnMiniSpark()
+        end
+    end
+end)
+
+connect(Player.CharacterAdded, function()
+    task.wait(0.8)
+    local humanoid = getCharacterParts()
+    if humanoid then
+        if speedEnabled then
+            oldSpeed = humanoid.WalkSpeed
+            humanoid.WalkSpeed = 32
+        end
+        if jumpEnabled then
+            oldJumpPower = humanoid.JumpPower
+            oldJumpHeight = humanoid.JumpHeight
+            if humanoid.UseJumpPower then humanoid.JumpPower = 100 else humanoid.JumpHeight = 50 end
+        end
+    end
+    if flyEnabled then setFly(false) end
+end)
+
+
+----------------------------------------------------------------
+-- INITIALIZE
+----------------------------------------------------------------
+BuiltinModules.Initialized = true
+ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
+
+addLog("INFO", "EPIC PLANETS initialized")
+refreshLogsPage()
+showPage("Home")
+setStatus("Loading intro")
+
+print("[EPIC PLANETS] Main.lua loaded.")
+if flashSound then print("[EPIC PLANETS AUDIO] Ready.") else addLog("WARN", "Audio unavailable.") end
+
+task.spawn(function()
+    local ok, err = pcall(function() BuiltinModules.Animations.PlayIntro() end)
+    if not ok then addLog("ERROR", "Intro error: " .. tostring(err)) end
 end)
