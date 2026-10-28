@@ -1,6 +1,6 @@
 --[[
     EPIC PLANETS
-    Main.lua + BuiltinModules + Tetris GUI + Fluid Rainbow + Blur FX
+    Main.lua + BuiltinModules + Tetris GUI + GUI Back Easing + UI Glass Blur
     Delta / Android
 
     BuiltinModules:
@@ -34,12 +34,6 @@ end
 if ENV.__EPIC_PLANETS_TETRIS_GUI then
     pcall(function()
         ENV.__EPIC_PLANETS_TETRIS_GUI:Destroy()
-    end)
-end
-
-if ENV.__EPIC_PLANETS_BLUR then
-    pcall(function()
-        ENV.__EPIC_PLANETS_BLUR:Destroy()
     end)
 end
 
@@ -84,7 +78,6 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local SoundService = game:GetService("SoundService")
 local Workspace = game:GetService("Workspace")
-local Lighting = game:GetService("Lighting")
 
 local Player = Players.LocalPlayer
 
@@ -93,23 +86,6 @@ if not Player then
 end
 
 local PlayerGui = Player:WaitForChild("PlayerGui")
-
-----------------------------------------------------------------
--- GLOBAL BLUR FX (Behind GUI & World)
-----------------------------------------------------------------
-
-local WorldBlur = Instance.new("BlurEffect")
-WorldBlur.Name = "EPIC_PLANETS_BLUR"
-WorldBlur.Size = 18
-WorldBlur.Enabled = true
-WorldBlur.Parent = Lighting
-ENV.__EPIC_PLANETS_BLUR = WorldBlur
-
-table.insert(Connections, {
-    Disconnect = function()
-        pcall(function() WorldBlur:Destroy() end)
-    end
-})
 
 ----------------------------------------------------------------
 -- BUILTINMODULES: CORE
@@ -210,13 +186,13 @@ local function create(className, properties, parent)
     return object
 end
 
-local function tween(object, duration, properties, style)
+local function tween(object, duration, properties, style, direction)
     local animation = TweenService:Create(
         object,
         TweenInfo.new(
             duration,
             style or Enum.EasingStyle.Quad,
-            Enum.EasingDirection.Out
+            direction or Enum.EasingDirection.Out
         ),
         properties
     )
@@ -389,6 +365,24 @@ function BuiltinModules.UI.Stroke(object, color, transparency)
     }, object)
 
     return stroke
+end
+
+-- ✨ Função para criar aura / blur estético por trás das GUIs principais
+function BuiltinModules.UI.AddGuiBlurBackdrop(parent)
+    local blurShadow = create("ImageLabel", {
+        Name = "GuiBlurBackdrop",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.new(1, 46, 1, 46),
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://6014261993", -- Textura suave estilo sombra difusa/blur
+        ImageColor3 = Color3.fromRGB(0, 0, 0),
+        ImageTransparency = 0.45,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(49, 49, 450, 450),
+        ZIndex = parent.ZIndex - 1,
+    }, parent)
+    return blurShadow
 end
 
 function BuiltinModules.UI.Label(parent, text, height, size, color)
@@ -586,6 +580,8 @@ local IntroPanel = create("Frame", {
     BorderSizePixel = 0,
 }, Intro)
 
+UI.AddGuiBlurBackdrop(IntroPanel)
+
 local introConstraint = Instance.new("UISizeConstraint")
 introConstraint.MinSize = Vector2.new(275, 350)
 introConstraint.MaxSize = Vector2.new(480, 530)
@@ -739,6 +735,9 @@ local Hub = create("Frame", {
     Visible = false,
 }, GUI)
 
+-- ✨ Blur atrás da Hub principal
+UI.AddGuiBlurBackdrop(Hub)
+
 local hubConstraint = Instance.new("UISizeConstraint")
 hubConstraint.MinSize = Vector2.new(300, 370)
 hubConstraint.MaxSize = Vector2.new(640, 590)
@@ -828,6 +827,7 @@ local Status = create("TextLabel", {
 
 ENV.__EPIC_PLANETS_STATUS = Status
 
+-- ✨ EP Icon (sem blur/glow no ícone, conforme solicitado)
 local Mini = create("TextButton", {
     Name = "EP_MiniIcon",
     AnchorPoint = Vector2.new(0, 0.5),
@@ -845,13 +845,6 @@ local Mini = create("TextButton", {
 
 UI.Round(Mini, 10)
 UI.Stroke(Mini, C.Blue, 0.02)
-
--- ✨ Blur & Glow effect behind EP Icon (faísca/ícone brilhante)
-local MiniGlow = create("UIStroke", {
-    Color = C.Blue,
-    Thickness = 2,
-    Transparency = 0.2,
-}, Mini)
 
 ----------------------------------------------------------------
 -- PAGE SYSTEM
@@ -2326,7 +2319,7 @@ UI.Button(SettingsPage, "RANDOMIZE TITLE", function()
     Header.Text = Title
     IntroTitle.Text = Title
 
-    setStatus("Title changed: " + Title)
+    setStatus("Title changed: " .. Title)
 end)
 
 UI.Button(SettingsPage, "TOGGLE FLASH AUDIO", function(button)
@@ -2358,7 +2351,7 @@ info(
 )
 
 ----------------------------------------------------------------
--- WINDOW CONTROLS
+-- WINDOW CONTROLS (✨ Keyframe Back Easing na Hub Gigante)
 ----------------------------------------------------------------
 
 connect(Minimize.Activated, function()
@@ -2386,10 +2379,11 @@ connect(TapIn.Activated, function()
     Hub.Size = UDim2.new(0.84, 0, 0.68, 0)
     Hub.BackgroundTransparency = 1
 
-    tween(Hub, 0.28, {
+    -- ✨ Animação com Back Easing ultrapassando o destino levemente antes de esticar
+    tween(Hub, 0.35, {
         Size = UDim2.new(0.91, 0, 0.74, 0),
         BackgroundTransparency = 0,
-    }, Enum.EasingStyle.Back)
+    }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
     showPage("Home")
 end)
@@ -2598,7 +2592,6 @@ connect(RunService.RenderStepped, function()
     local hue = (now * 0.15) % 1
 
     if BuiltinModules.Settings.Rainbow then
-        -- ✨ Todos os elementos de arco-íris agora são totalmente fluídos e conectados em onda suave
         for index, stroke in ipairs(rainbowObjects) do
             if stroke and stroke.Parent then
                 local offsetHue = (hue + (index * 0.004)) % 1
@@ -2606,7 +2599,6 @@ connect(RunService.RenderStepped, function()
             end
         end
 
-        -- ✨ Faíscas/Estrelas da intro com arco-íris fluído
         for index, star in ipairs(StarSparks) do
             if star and star.Parent then
                 star.BackgroundColor3 = Color3.fromHSV((hue + (index * 0.01)) % 1, 0.9, 1)
@@ -2769,6 +2761,10 @@ local TWin = create("Frame", {
     BackgroundColor3 = C.Panel,
     BorderSizePixel = 0,
 }, TetrisGUI)
+
+-- ✨ Blur atrás da janela do Tetris também
+UI.AddGuiBlurBackdrop(TWin)
+
 UI.Round(TWin, 12)
 UI.Stroke(TWin, C.Purple, 0.05)
 
@@ -3249,7 +3245,7 @@ end)
 BuiltinModules.Initialized = true
 ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
 
-addLog("INFO", "EPIC PLANETS initialized with Fluid Rainbow and Blur FX")
+addLog("INFO", "EPIC PLANETS initialized with GUI Backdrop Blur and Back Easing")
 refreshLogsPage()
 showPage("Home")
 setStatus("Loading intro")
