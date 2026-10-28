@@ -357,7 +357,7 @@ local TetrisPage = makePage("Tetris")
 addTab("Home", "HOME", 1); addTab("Player", "PLAYER", 2); addTab("BuiltinModules", "BUILTINS", 3); addTab("Movesets", "MOVESETS", 4); addTab("Models", "MODEL STORE", 5); addTab("Settings", "SETTINGS", 6); addTab("Personalization", "PERSONAL", 7); addTab("ScriptBlox", "SCRIPTBLOX", 8); addTab("Logs", "LOGS", 9); addTab("Executor", "EXECUTOR", 10); addTab("Tetris", "TETRIS", 11)
 
 ----------------------------------------------------------------
--- SCRIPTBLOX, LOGS, EXECUTOR, PERSONALIZATION (MANTIDOS)
+-- SCRIPTBLOX, LOGS, EXECUTOR, PERSONALIZATION
 ----------------------------------------------------------------
 local ScriptBloxBase = "https://scriptblox.com"
 local ScriptResultCards = {}
@@ -416,7 +416,7 @@ UI.Button(ScriptBloxPage, "SEARCH SCRIPTS", function()
 end)
 UI.Button(ScriptBloxPage, "TRENDING SCRIPTS", function() fetchScriptBlox(ScriptBloxBase .. "/api/script/trending?max=10", false, "Loading trending...") end)
 
--- LOGS & EXECUTOR (Simplificados)
+-- LOGS & EXECUTOR
 UI.Label(LogsPage, "RUNTIME LOGS", 29, 14, C.Text).Font = Enum.Font.GothamBlack
 info(LogsPage, "Shows status changes and errors.", 43, C.Muted)
 local LogsOutput
@@ -794,6 +794,22 @@ local TWin = create("Frame", { Name = "Window", AnchorPoint = Vector2.new(0.5, 0
 UI.Round(TWin, 12); UI.Stroke(TWin, C.Purple, 0.05)
 local tWinConstraint = Instance.new("UISizeConstraint"); tWinConstraint.MinSize = Vector2.new(280, 420); tWinConstraint.MaxSize = Vector2.new(350, 500); tWinConstraint.Parent = TWin
 
+-- ✅ CORREÇÃO PARA NÃO ULTRAPASSAR A TELA
+local TScale = Instance.new("UIScale")
+TScale.Parent = TWin
+
+local function updateTetrisScale()
+    local camera = Workspace.CurrentCamera
+    if not camera then return end
+    local vp = camera.ViewportSize
+    local sx = (vp.X * 0.92) / 330
+    local sy = (vp.Y * 0.92) / 480
+    local scale = math.clamp(math.min(1, sx, sy), 0.4, 1)
+    TScale.Scale = scale
+end
+
+updateTetrisScale()
+
 local THeader = create("TextButton", { Active = true, AutoButtonColor = false, Position = UDim2.new(0, 10, 0, 6), Size = UDim2.new(1, -75, 0, 26), BackgroundTransparency = 1, Text = "TETRIS  ♪", TextColor3 = C.Text, TextSize = 16, Font = Enum.Font.GothamBlack, TextXAlignment = Enum.TextXAlignment.Left }, TWin)
 local TClose = create("TextButton", { Position = UDim2.new(1, -36, 0, 6), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0, Text = "×", TextColor3 = C.Text, TextSize = 17, Font = Enum.Font.GothamBold }, TWin)
 UI.Round(TClose, 6); UI.Stroke(TClose, C.Purple, 0.3)
@@ -879,7 +895,7 @@ if gameConn then gameConn:Disconnect() end
 gameConn = RunService.Heartbeat:Connect(function() if not running or over then return end; local now = os.clock(); dropAcc += (now - lastTick); lastTick = now; if dropAcc >= dropInt then dropAcc = 0; moveDown() end; render() end)
 table.insert(Connections, gameConn)
 
-local function openTetris() TetrisGUI.Enabled = true; if not running then startGame() end; stopPersonalMusic(); task.spawn(function() playPersonalMusic("Tetris Theme", true) end) end
+local function openTetris() TetrisGUI.Enabled = true; updateTetrisScale(); if not running then startGame() end; stopPersonalMusic(); task.spawn(function() playPersonalMusic("Tetris Theme", true) end) end
 local function closeTetris() TetrisGUI.Enabled = false; running = false; stopPersonalMusic(); if selectedMusic and selectedMusic ~= "None" then task.spawn(function() playPersonalMusic(selectedMusic, false) end) end end
 UI.Button(TetrisPage, "🎮  ABRIR JOGO DO TETRIS", function() openTetris() end, 50)
 UI.Button(HomePage, "🎮  JOGAR TETRIS", function() openTetris() end, 42)
@@ -907,7 +923,7 @@ connect(UserInputService.InputEnded, function(input) if input.UserInputType == E
 task.spawn(function() preparePersonalAudio("Music", "Tetris Theme") end)
 
 ----------------------------------------------------------------
--- CREDITS (Adicionado de forma segura)
+-- CREDITS
 ----------------------------------------------------------------
 local function fetchRobloxUser(username)
     local ok, response = pcall(function() return HttpService:PostAsync("https://users.roblox.com/v1/usernames/users", HttpService:JSONEncode({ usernames = { username } }), Enum.HttpContentType.ApplicationJson) end)
