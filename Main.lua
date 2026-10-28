@@ -1,14 +1,7 @@
 --[[
     EPIC PLANETS
-    Main.lua + BuiltinModules + Tetris GUI
+    Main.lua + BuiltinModules + Tetris + Credits
     Delta / Android
-
-    BuiltinModules:
-      UI
-      Audio
-      Animations
-      Settings
-      ModuleLoader
 ]]
 
 local ENV = (type(getgenv) == "function" and getgenv()) or _G
@@ -19,23 +12,16 @@ local ENV = (type(getgenv) == "function" and getgenv()) or _G
 
 if type(ENV.__EPIC_PLANETS_CONNECTIONS) == "table" then
     for _, connection in ipairs(ENV.__EPIC_PLANETS_CONNECTIONS) do
-        pcall(function()
-            connection:Disconnect()
-        end)
+        pcall(function() connection:Disconnect() end)
     end
 end
 
 if ENV.__EPIC_PLANETS_GUI then
-    pcall(function()
-        ENV.__EPIC_PLANETS_GUI:Destroy()
-    end)
+    pcall(function() ENV.__EPIC_PLANETS_GUI:Destroy() end)
 end
 
--- ✅ TETRIS: limpar GUI antiga do Tetris
 if ENV.__EPIC_PLANETS_TETRIS_GUI then
-    pcall(function()
-        ENV.__EPIC_PLANETS_TETRIS_GUI:Destroy()
-    end)
+    pcall(function() ENV.__EPIC_PLANETS_TETRIS_GUI:Destroy() end)
 end
 
 if ENV.__EPIC_PLANETS_FLASH_SOUND then
@@ -57,9 +43,7 @@ ENV.__EPIC_PLANETS_PERSONAL_AUDIO_SOUNDS = {}
 
 if type(ENV.__EPIC_PLANETS_MODELS) == "table" then
     for _, model in ipairs(ENV.__EPIC_PLANETS_MODELS) do
-        pcall(function()
-            model:Destroy()
-        end)
+        pcall(function() model:Destroy() end)
     end
 end
 
@@ -79,13 +63,10 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local SoundService = game:GetService("SoundService")
 local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
 
 local Player = Players.LocalPlayer
-
-if not Player then
-    error("[EPIC PLANETS] LocalPlayer not found.")
-end
-
+if not Player then error("[EPIC PLANETS] LocalPlayer not found.") end
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
 ----------------------------------------------------------------
@@ -93,7 +74,6 @@ local PlayerGui = Player:WaitForChild("PlayerGui")
 ----------------------------------------------------------------
 
 local BuiltinModules = {}
-
 BuiltinModules.Version = "1.0.0"
 BuiltinModules.Initialized = false
 
@@ -102,10 +82,8 @@ BuiltinModules.Colors = {
     Panel = Color3.fromRGB(17, 17, 22),
     PanelAlt = Color3.fromRGB(26, 26, 33),
     PanelHover = Color3.fromRGB(38, 38, 47),
-
     Text = Color3.fromRGB(240, 240, 245),
     Muted = Color3.fromRGB(157, 157, 170),
-
     Blue = Color3.fromRGB(55, 145, 255),
     Purple = Color3.fromRGB(173, 96, 255),
     Green = Color3.fromRGB(72, 220, 145),
@@ -130,9 +108,7 @@ BuiltinModules.Titles = {
 
 math.randomseed(os.time() + math.floor(os.clock() * 100000))
 
-local Title = BuiltinModules.Titles[
-    math.random(1, #BuiltinModules.Titles)
-]
+local Title = BuiltinModules.Titles[math.random(1, #BuiltinModules.Titles)]
 
 ----------------------------------------------------------------
 -- BUILTINMODULES: EXECUTOR
@@ -142,27 +118,16 @@ BuiltinModules.Executor = {}
 
 function BuiltinModules.Executor.Get(name)
     local fn
-
-    pcall(function()
-        fn = ENV[name]
-    end)
-
+    pcall(function() fn = ENV[name] end)
     if type(fn) ~= "function" then
-        pcall(function()
-            fn = _G[name]
-        end)
+        pcall(function() fn = _G[name] end)
     end
-
     return type(fn) == "function" and fn or nil
 end
 
 function BuiltinModules.Executor.Call(name, ...)
     local fn = BuiltinModules.Executor.Get(name)
-
-    if not fn then
-        return false, "Executor API unavailable: " .. name
-    end
-
+    if not fn then return false, "Executor API unavailable: " .. name end
     return pcall(fn, ...)
 end
 
@@ -178,11 +143,9 @@ end
 
 local function create(className, properties, parent)
     local object = Instance.new(className)
-
     for property, value in pairs(properties or {}) do
         object[property] = value
     end
-
     object.Parent = parent
     return object
 end
@@ -190,49 +153,35 @@ end
 local function tween(object, duration, properties, style)
     local animation = TweenService:Create(
         object,
-        TweenInfo.new(
-            duration,
-            style or Enum.EasingStyle.Quad,
-            Enum.EasingDirection.Out
-        ),
+        TweenInfo.new(duration, style or Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
         properties
     )
-
     animation:Play()
     return animation
 end
 
--- Runtime log buffer. It is bounded so the UI cannot grow forever.
 local RuntimeLogs = {}
 local refreshLogsPage
 local MAX_RUNTIME_LOGS = 100
 
 local function addLog(level, message)
     local stamp = "--:--:--"
-    pcall(function()
-        stamp = os.date("%H:%M:%S")
-    end)
-
+    pcall(function() stamp = os.date("%H:%M:%S") end)
     local entry = {
         time = stamp,
         level = tostring(level or "INFO"),
         message = tostring(message or ""),
     }
-
     if #entry.message > 220 then
         entry.message = string.sub(entry.message, 1, 217) .. "..."
     end
-
     table.insert(RuntimeLogs, entry)
     while #RuntimeLogs > MAX_RUNTIME_LOGS do
         table.remove(RuntimeLogs, 1)
     end
-
     if refreshLogsPage then
         task.defer(function()
-            if refreshLogsPage then
-                pcall(refreshLogsPage)
-            end
+            if refreshLogsPage then pcall(refreshLogsPage) end
         end)
     end
 end
@@ -240,7 +189,6 @@ end
 local function setStatus(message)
     local value = tostring(message)
     addLog("INFO", value)
-
     local status = ENV.__EPIC_PLANETS_STATUS
     if status and status.Parent then
         status.Text = "Status: " .. value
@@ -252,94 +200,50 @@ end
 ----------------------------------------------------------------
 
 BuiltinModules.Audio = {}
-
-BuiltinModules.Audio.URL =
-    "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Screenrecorder-2026-09-18-20-34-50-385.mp3"
-
+BuiltinModules.Audio.URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Screenrecorder-2026-09-18-20-34-50-385.mp3"
 BuiltinModules.Audio.Folder = "EpicPlanets"
-
-BuiltinModules.Audio.File =
-    BuiltinModules.Audio.Folder
-    .. "/Screenrecorder-2026-09-18-20-34-50-385.mp3"
+BuiltinModules.Audio.File = BuiltinModules.Audio.Folder .. "/Screenrecorder-2026-09-18-20-34-50-385.mp3"
 
 function BuiltinModules.Audio.Prepare()
     local executor = BuiltinModules.Executor
-
-    local folderOK, folderExists = executor.Call(
-        "isfolder",
-        BuiltinModules.Audio.Folder
-    )
-
+    local folderOK, folderExists = executor.Call("isfolder", BuiltinModules.Audio.Folder)
     if not folderOK or folderExists ~= true then
         executor.Call("makefolder", BuiltinModules.Audio.Folder)
     end
-
-    local checkOK, fileExists = executor.Call(
-        "isfile",
-        BuiltinModules.Audio.File
-    )
-
+    local checkOK, fileExists = executor.Call("isfile", BuiltinModules.Audio.File)
     if not checkOK or fileExists ~= true then
         local downloadOK, data = pcall(function()
             return game:HttpGet(BuiltinModules.Audio.URL)
         end)
-
         if not downloadOK or type(data) ~= "string" or #data == 0 then
             warn("[EPIC PLANETS AUDIO] MP3 download failed.")
             return nil
         end
-
-        local writeOK, writeError = executor.Call(
-            "writefile",
-            BuiltinModules.Audio.File,
-            data
-        )
-
+        local writeOK, writeError = executor.Call("writefile", BuiltinModules.Audio.File, data)
         if not writeOK then
-            warn(
-                "[EPIC PLANETS AUDIO] Could not save MP3: "
-                .. tostring(writeError)
-            )
-
+            warn("[EPIC PLANETS AUDIO] Could not save MP3: " .. tostring(writeError))
             return nil
         end
     end
-
-    local assetOK, assetId = executor.Call(
-        "getcustomasset",
-        BuiltinModules.Audio.File
-    )
-
+    local assetOK, assetId = executor.Call("getcustomasset", BuiltinModules.Audio.File)
     if not assetOK or type(assetId) ~= "string" then
         warn("[EPIC PLANETS AUDIO] Could not load audio asset.")
         return nil
     end
-
     local sound = Instance.new("Sound")
     sound.Name = "EPIC_PLANETS_FLASH_AUDIO"
     sound.SoundId = assetId
     sound.Volume = BuiltinModules.Settings.AudioVolume
     sound.Looped = false
     sound.Parent = SoundService
-
     ENV.__EPIC_PLANETS_FLASH_SOUND = sound
-
-    print("[EPIC PLANETS AUDIO] MP3 prepared.")
-
     return sound
 end
 
 function BuiltinModules.Audio.PlayFlash()
-    if not BuiltinModules.Settings.FlashAudio then
-        return
-    end
-
+    if not BuiltinModules.Settings.FlashAudio then return end
     local sound = ENV.__EPIC_PLANETS_FLASH_SOUND
-
-    if not sound or not sound.Parent then
-        return
-    end
-
+    if not sound or not sound.Parent then return end
     pcall(function()
         sound:Stop()
         sound.TimePosition = 0
@@ -354,19 +258,15 @@ end
 BuiltinModules.UI = {}
 
 function BuiltinModules.UI.Round(object, radius)
-    create("UICorner", {
-        CornerRadius = UDim.new(0, radius or 8),
-    }, object)
+    create("UICorner", { CornerRadius = UDim.new(0, radius or 8) }, object)
 end
 
 function BuiltinModules.UI.Stroke(object, color, transparency)
-    local stroke = create("UIStroke", {
+    return create("UIStroke", {
         Color = color or BuiltinModules.Colors.Blue,
         Thickness = 1,
         Transparency = transparency or 0.15,
     }, object)
-
-    return stroke
 end
 
 function BuiltinModules.UI.Label(parent, text, height, size, color)
@@ -395,20 +295,14 @@ function BuiltinModules.UI.Button(parent, text, callback, height)
         TextWrapped = true,
         AutoButtonColor = true,
     }, parent)
-
     BuiltinModules.UI.Round(button, 7)
     BuiltinModules.UI.Stroke(button, nil, 0.4)
-
     connect(button.Activated, function()
         local ok, err = pcall(callback, button)
-
         if not ok then
-            local message = "Button error: " .. tostring(err)
-            addLog("ERROR", message)
-            warn("[EPIC PLANETS] " .. message)
+            addLog("ERROR", "Button error: " .. tostring(err))
         end
     end)
-
     return button
 end
 
@@ -417,82 +311,49 @@ end
 ----------------------------------------------------------------
 
 BuiltinModules.ModuleLoader = {}
-
 BuiltinModules.ModuleLoader.Folder = "EpicPlanets/Modules"
 
 function BuiltinModules.ModuleLoader.EnsureFolders()
     local executor = BuiltinModules.Executor
     local makefolder = executor.Get("makefolder")
-    local isfolder = executor.Get("isfolder")
-
-    if type(makefolder) ~= "function" then
-        return false, "Executor file APIs unavailable; local modules are disabled."
-    end
-
+    if type(makefolder) ~= "function" then return false end
     for _, folder in ipairs({"EpicPlanets", BuiltinModules.ModuleLoader.Folder}) do
-        local exists = false
-        if type(isfolder) == "function" then
-            local ok, value = pcall(isfolder, folder)
-            exists = ok and value == true
-        end
-        if not exists then
-            pcall(makefolder, folder)
-        end
+        pcall(makefolder, folder)
     end
     return true
 end
 
 function BuiltinModules.ModuleLoader.List()
     BuiltinModules.ModuleLoader.EnsureFolders()
-
     local listFunction = BuiltinModules.Executor.Get("listfiles")
     if type(listFunction) ~= "function" then
-        return nil, "Local module library unavailable in this executor; the main interface still works."
+        return nil, "Local module library unavailable in this executor."
     end
-
     local ok, result = pcall(listFunction, BuiltinModules.ModuleLoader.Folder)
     if not ok or type(result) ~= "table" then
-        return nil, "Cannot scan EpicPlanets/Modules. Check executor file permissions."
+        return nil, "Cannot scan EpicPlanets/Modules."
     end
-
     return result
 end
 
 function BuiltinModules.ModuleLoader.Run(path)
     local executor = BuiltinModules.Executor
     local readOK, source = executor.Call("readfile", path)
-
-    if not readOK or type(source) ~= "string" then
-        return false, "Could not read module file"
-    end
-
+    if not readOK or type(source) ~= "string" then return false, "Could not read module file" end
     local loadFunction = executor.Get("loadstring")
-
-    if not loadFunction then
-        return false, "loadstring unavailable"
-    end
-
+    if not loadFunction then return false, "loadstring unavailable" end
     local compileOK, chunk = pcall(loadFunction, source)
-
-    if not compileOK or type(chunk) ~= "function" then
-        return false, tostring(chunk)
-    end
-
+    if not compileOK or type(chunk) ~= "function" then return false, tostring(chunk) end
     local runOK, result = pcall(chunk)
-
-    if not runOK then
-        return false, tostring(result)
-    end
-
+    if not runOK then return false, tostring(result) end
     return true, "Module executed"
 end
 
 ----------------------------------------------------------------
--- PREPARE AUDIO BEFORE INTRO
+-- PREPARE AUDIO
 ----------------------------------------------------------------
 
 pcall(function() BuiltinModules.ModuleLoader.EnsureFolders() end)
-
 local flashSound = BuiltinModules.Audio.Prepare()
 
 ----------------------------------------------------------------
@@ -509,7 +370,6 @@ local GUI = create("ScreenGui", {
     DisplayOrder = 999,
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 }, PlayerGui)
-
 ENV.__EPIC_PLANETS_GUI = GUI
 
 ----------------------------------------------------------------
@@ -525,19 +385,12 @@ local Intro = create("Frame", {
 
 for i = 1, 65 do
     local star = create("Frame", {
-        Position = UDim2.fromScale(
-            math.random(1, 99) / 100,
-            math.random(1, 99) / 100
-        ),
-        Size = UDim2.fromOffset(
-            math.random(1, 3),
-            math.random(1, 3)
-        ),
+        Position = UDim2.fromScale(math.random(1, 99) / 100, math.random(1, 99) / 100),
+        Size = UDim2.fromOffset(math.random(1, 3), math.random(1, 3)),
         BackgroundColor3 = i % 5 == 0 and C.Blue or C.Text,
         BackgroundTransparency = math.random(25, 75) / 100,
         BorderSizePixel = 0,
     }, Intro)
-
     UI.Round(star, 4)
 end
 
@@ -594,29 +447,20 @@ local Core = create("Frame", {
     BackgroundColor3 = C.Text,
     BorderSizePixel = 0,
 }, Orbit)
-
 UI.Round(Core, 20)
 UI.Stroke(Core, C.Blue, 0.1)
 
-local PlanetColors = {
-    C.Blue,
-    C.Purple,
-    C.Green,
-    Color3.fromRGB(255, 170, 65),
-}
-
+local PlanetColors = { C.Blue, C.Purple, C.Green, Color3.fromRGB(255, 170, 65) }
 local Planets = {}
 
 for i = 1, 4 do
     local planet = create("Frame", {
         Name = "Planet" .. i,
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Size = UDim2.fromOffset(i % 2 == 0 and 16 or 12,
-                               i % 2 == 0 and 16 or 12),
+        Size = UDim2.fromOffset(i % 2 == 0 and 16 or 12, i % 2 == 0 and 16 or 12),
         BackgroundColor3 = PlanetColors[i],
         BorderSizePixel = 0,
     }, Orbit)
-
     UI.Round(planet, 20)
     Planets[i] = planet
 end
@@ -627,7 +471,6 @@ local Ring = create("Frame", {
     Size = UDim2.fromOffset(92, 72),
     BackgroundTransparency = 1,
 }, Orbit)
-
 UI.Round(Ring, 40)
 UI.Stroke(Ring, C.Blue, 0.55)
 
@@ -639,10 +482,8 @@ local FragmentArea = create("Frame", {
 }, IntroPanel)
 
 local Fragments = {}
-
 for i = 1, 321 do
     local fragmentSize = math.random(2, 5)
-
     local fragment = create("Frame", {
         Name = "Fragment" .. i,
         AnchorPoint = Vector2.new(0.5, 0.5),
@@ -651,7 +492,6 @@ for i = 1, 321 do
         BackgroundColor3 = i % 6 == 0 and C.Purple or C.Blue,
         BorderSizePixel = 0,
     }, FragmentArea)
-
     UI.Round(fragment, 4)
     Fragments[i] = fragment
 end
@@ -662,7 +502,6 @@ local ProgressBack = create("Frame", {
     BackgroundColor3 = C.PanelAlt,
     BorderSizePixel = 0,
 }, IntroPanel)
-
 UI.Round(ProgressBack, 4)
 
 local Progress = create("Frame", {
@@ -670,7 +509,6 @@ local Progress = create("Frame", {
     BackgroundColor3 = C.Blue,
     BorderSizePixel = 0,
 }, ProgressBack)
-
 UI.Round(Progress, 4)
 
 local FragmentCount = create("TextLabel", {
@@ -696,7 +534,6 @@ local TapIn = create("TextButton", {
     Font = Enum.Font.GothamBlack,
     Visible = false,
 }, IntroPanel)
-
 UI.Round(TapIn, 7)
 UI.Stroke(TapIn, C.Blue, 0.08)
 
@@ -747,7 +584,6 @@ local Minimize = create("TextButton", {
     TextSize = 19,
     Font = Enum.Font.GothamBold,
 }, Hub)
-
 UI.Round(Minimize, 6)
 UI.Stroke(Minimize, C.Blue, 0.3)
 
@@ -763,7 +599,6 @@ local Sidebar = create("ScrollingFrame", {
     AutomaticCanvasSize = Enum.AutomaticSize.Y,
     CanvasSize = UDim2.new(0, 0, 0, 0),
 }, Hub)
-
 UI.Round(Sidebar, 7)
 UI.Stroke(Sidebar, C.Blue, 0.55)
 
@@ -785,7 +620,6 @@ local PageHost = create("Frame", {
     BackgroundColor3 = C.Background,
     BorderSizePixel = 0,
 }, Hub)
-
 UI.Round(PageHost, 7)
 UI.Stroke(PageHost, C.Blue, 0.55)
 
@@ -800,7 +634,6 @@ local Status = create("TextLabel", {
     TextXAlignment = Enum.TextXAlignment.Left,
     TextTruncate = Enum.TextTruncate.AtEnd,
 }, Hub)
-
 ENV.__EPIC_PLANETS_STATUS = Status
 
 local Mini = create("TextButton", {
@@ -817,7 +650,6 @@ local Mini = create("TextButton", {
     Visible = false,
     ZIndex = 100,
 }, GUI)
-
 UI.Round(Mini, 10)
 UI.Stroke(Mini, C.Blue, 0.02)
 
@@ -840,50 +672,33 @@ local function makePage(name)
         CanvasSize = UDim2.new(0, 0, 0, 0),
         Visible = false,
     }, PageHost)
-
     local padding = Instance.new("UIPadding")
     padding.PaddingTop = UDim.new(0, 8)
     padding.PaddingBottom = UDim.new(0, 8)
     padding.PaddingLeft = UDim.new(0, 8)
     padding.PaddingRight = UDim.new(0, 8)
     padding.Parent = page
-
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 7)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = page
-
     Pages[name] = page
     return page
 end
 
 local function info(parent, text, height, color)
-    return UI.Label(
-        parent,
-        text,
-        height or 42,
-        11,
-        color or C.Muted
-    )
+    return UI.Label(parent, text, height or 42, 11, color or C.Muted)
 end
 
 local function showPage(name)
-    if not Pages[name] then
-        return
-    end
-
+    if not Pages[name] then return end
     for pageName, page in pairs(Pages) do
         page.Visible = pageName == name
     end
-
     for tabName, button in pairs(Tabs) do
-        button.BackgroundColor3 =
-            tabName == name and C.PanelHover or C.PanelAlt
-
-        button.TextColor3 =
-            tabName == name and C.Text or C.Muted
+        button.BackgroundColor3 = tabName == name and C.PanelHover or C.PanelAlt
+        button.TextColor3 = tabName == name and C.Text or C.Muted
     end
-
     setStatus("Opened " .. name)
 end
 
@@ -900,15 +715,10 @@ local function addTab(name, label, order)
         Font = Enum.Font.GothamBold,
         TextWrapped = true,
     }, Sidebar)
-
     UI.Round(button, 6)
     UI.Stroke(button, C.Blue, 0.65)
-
     Tabs[name] = button
-
-    connect(button.Activated, function()
-        showPage(name)
-    end)
+    connect(button.Activated, function() showPage(name) end)
 end
 
 local HomePage = makePage("Home")
@@ -921,7 +731,7 @@ local PersonalizationPage = makePage("Personalization")
 local ScriptBloxPage = makePage("ScriptBlox")
 local LogsPage = makePage("Logs")
 local ExecutorPage = makePage("Executor")
-local TetrisPage = makePage("Tetris") -- ✅ TETRIS
+local TetrisPage = makePage("Tetris")
 
 addTab("Home", "HOME", 1)
 addTab("Player", "PLAYER", 2)
@@ -933,13 +743,12 @@ addTab("Personalization", "PERSONAL", 7)
 addTab("ScriptBlox", "SCRIPTBLOX", 8)
 addTab("Logs", "LOGS", 9)
 addTab("Executor", "EXECUTOR", 10)
-addTab("Tetris", "TETRIS", 11) -- ✅ TETRIS
+addTab("Tetris", "TETRIS", 11)
 
 ----------------------------------------------------------------
 -- SCRIPTBLOX STORE
 ----------------------------------------------------------------
 
-local HttpService = game:GetService("HttpService")
 local ScriptBloxBase = "https://scriptblox.com"
 local ScriptResultCards = {}
 local storeQuery = ""
@@ -949,7 +758,7 @@ local storeBusy = false
 local storeStrictMatch = false
 
 UI.Label(ScriptBloxPage, "SCRIPTBLOX STORE", 29, 14, C.Text).Font = Enum.Font.GothamBlack
-info(ScriptBloxPage, "Search community scripts. Review source before using it; this store copies source but never auto-executes it.", 55, C.Muted)
+info(ScriptBloxPage, "Search community scripts. Review source before using it.", 55, C.Muted)
 info(ScriptBloxPage, "Powered by ScriptBlox.com", 22, C.Blue)
 
 local StoreSearchBox = create("TextBox", {
@@ -981,12 +790,9 @@ local MatchSearchButton = UI.Button(ScriptBloxPage, "MATCH SEARCH: OFF", functio
     StoreStatus.Text = storeStrictMatch
         and "Match Search is ON: results use strict matching."
         or "Match Search is OFF: results may be broader."
-    addLog("INFO", "ScriptBlox Match Search " .. (storeStrictMatch and "enabled" or "disabled"))
 end, 34)
-MatchSearchButton.Name = "ScriptBloxMatchSearch"
 
 StoreStatus = UI.Label(ScriptBloxPage, "Enter a search term or tap TRENDING.", 30, 10, C.Muted)
-StoreStatus.Name = "ScriptBloxStatus"
 StoreStatus.TextWrapped = true
 
 local function urlEncode(value)
@@ -997,9 +803,7 @@ end
 
 local function clearStoreCards()
     for _, card in ipairs(ScriptResultCards) do
-        pcall(function()
-            card:Destroy()
-        end)
+        pcall(function() card:Destroy() end)
     end
     table.clear(ScriptResultCards)
 end
@@ -1008,11 +812,9 @@ local function copyToClipboard(value)
     local clipboardNames = {"setclipboard", "toclipboard", "setrbxclipboard"}
     for _, name in ipairs(clipboardNames) do
         local ok = BuiltinModules.Executor.Call(name, value)
-        if ok then
-            return true
-        end
+        if ok then return true end
     end
-    return false, "Clipboard API unavailable in this executor"
+    return false, "Clipboard API unavailable"
 end
 
 local function makeScriptCard(scriptData)
@@ -1021,16 +823,7 @@ local function makeScriptCard(scriptData)
     if type(scriptData.game) == "table" and scriptData.game.name then
         gameName = tostring(scriptData.game.name)
     end
-
-    local flags = {}
-    if scriptData.verified == true then table.insert(flags, "Verified") end
-    if scriptData.key == true then table.insert(flags, "Key system") end
-    if scriptData.isUniversal == true then table.insert(flags, "Universal") end
-    if scriptData.isPatched == true then table.insert(flags, "Marked patched") end
-    if #flags == 0 then table.insert(flags, "No special flags reported") end
-
     local card = create("Frame", {
-        Name = "ScriptResultCard",
         Size = UDim2.new(1, -4, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundColor3 = C.Panel,
@@ -1039,187 +832,89 @@ local function makeScriptCard(scriptData)
     table.insert(ScriptResultCards, card)
     UI.Round(card, 7)
     UI.Stroke(card, C.Blue, 0.55)
-
     local padding = Instance.new("UIPadding")
     padding.PaddingTop = UDim.new(0, 7)
     padding.PaddingBottom = UDim.new(0, 7)
     padding.PaddingLeft = UDim.new(0, 7)
     padding.PaddingRight = UDim.new(0, 7)
     padding.Parent = card
-
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 5)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = card
-
     local titleLabel = UI.Label(card, title, 34, 11, C.Text)
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.LayoutOrder = 1
-
     local views = tonumber(scriptData.views) or 0
-    local meta = "Game: " .. gameName .. "\nViews: " .. tostring(views) .. " | " .. table.concat(flags, ", ")
-    local metaLabel = UI.Label(card, meta, 42, 9, C.Muted)
+    local metaLabel = UI.Label(card, "Game: " .. gameName .. "\nViews: " .. tostring(views), 42, 9, C.Muted)
     metaLabel.LayoutOrder = 2
-
     local scriptIdentifier = tostring(scriptData.slug or scriptData._id or "")
     local pageURL = ScriptBloxBase .. "/script/" .. urlEncode(scriptIdentifier)
     local rawURL = ScriptBloxBase .. "/api/script/raw/" .. urlEncode(scriptIdentifier)
-
     local copySourceButton = UI.Button(card, "COPY SCRIPT SOURCE", function()
-        if scriptIdentifier == "" then
-            StoreStatus.Text = "This result has no script identifier."
-            addLog("WARN", "ScriptBlox result missing script identifier")
-            return
-        end
-
-        StoreStatus.Text = "Fetching source..."
-        addLog("INFO", "Fetching source for " .. title)
         task.spawn(function()
-            local ok, source = pcall(function()
-                return game:HttpGet(rawURL)
-            end)
+            local ok, source = pcall(function() return game:HttpGet(rawURL) end)
             if not ok or type(source) ~= "string" or #source == 0 then
-                StoreStatus.Text = "Could not fetch source. Check connection/executor support."
-                addLog("ERROR", "ScriptBlox source request failed: " .. tostring(source))
+                StoreStatus.Text = "Could not fetch source."
                 return
             end
-
-            local copied, copyError = copyToClipboard(source)
-            if copied then
-                StoreStatus.Text = "Source copied. Review it before running."
-                addLog("INFO", "Copied source: " .. title)
-            else
-                StoreStatus.Text = tostring(copyError) .. ". Open the ScriptBlox page instead."
-                addLog("WARN", tostring(copyError))
-            end
+            local copied = copyToClipboard(source)
+            StoreStatus.Text = copied and "Source copied." or "Clipboard unavailable."
         end)
     end, 31)
     copySourceButton.LayoutOrder = 3
-
-    local copyLinkButton = UI.Button(card, "COPY SCRIPTBLOX LINK", function()
-        local copied, copyError = copyToClipboard(pageURL)
-        if copied then
-            StoreStatus.Text = "ScriptBlox link copied."
-            addLog("INFO", "Copied ScriptBlox link: " .. title)
-        else
-            StoreStatus.Text = tostring(copyError)
-            addLog("WARN", tostring(copyError))
-        end
-    end, 31)
-    copyLinkButton.LayoutOrder = 4
 end
 
 local function fetchScriptBlox(endpoint, appendResults, description)
-    if storeBusy then
-        StoreStatus.Text = "A request is already running. Please wait for it to finish."
-        return
-    end
-
+    if storeBusy then return end
     storeRequestId = storeRequestId + 1
     local requestId = storeRequestId
     storeBusy = true
-    StoreStatus.Text = description or "Loading ScriptBlox results..."
-
-    if not appendResults then
-        clearStoreCards()
-    end
-
-    addLog("INFO", "ScriptBlox request: " .. tostring(description or "load"))
+    StoreStatus.Text = description or "Loading..."
+    if not appendResults then clearStoreCards() end
     task.spawn(function()
-        local requestOK, body = pcall(function()
-            return game:HttpGet(endpoint)
-        end)
+        local ok, body = pcall(function() return game:HttpGet(endpoint) end)
         if requestId ~= storeRequestId then return end
-
-        if not requestOK or type(body) ~= "string" or #body == 0 then
+        if not ok or type(body) ~= "string" or #body == 0 then
             storeBusy = false
-            StoreStatus.Text = "Request failed. Check internet and executor HTTP support."
-            addLog("ERROR", "ScriptBlox HTTP request failed: " .. tostring(body))
+            StoreStatus.Text = "Request failed."
             return
         end
-
-        local decodeOK, payload = pcall(function()
-            return HttpService:JSONDecode(body)
-        end)
-        if requestId ~= storeRequestId then return end
-
+        local decodeOK, payload = pcall(function() return HttpService:JSONDecode(body) end)
         if not decodeOK or type(payload) ~= "table" then
             storeBusy = false
-            StoreStatus.Text = "ScriptBlox returned invalid JSON."
-            addLog("ERROR", "Could not decode ScriptBlox response: " .. tostring(payload))
+            StoreStatus.Text = "Invalid JSON."
             return
         end
-
-        if payload.message then
-            storeBusy = false
-            StoreStatus.Text = "ScriptBlox: " .. tostring(payload.message)
-            addLog("WARN", "ScriptBlox API: " .. tostring(payload.message))
-            return
-        end
-
         local result = payload.result
         local scripts = type(result) == "table" and result.scripts or nil
         if type(scripts) ~= "table" then
             storeBusy = false
-            StoreStatus.Text = "No script results were returned by the API."
-            addLog("WARN", "ScriptBlox response did not contain result.scripts")
+            StoreStatus.Text = "No results."
             return
         end
-
         local count = 0
         for _, scriptData in ipairs(scripts) do
             if type(scriptData) == "table" then
-                local safeData = scriptData
-                local okCard, cardError = pcall(function()
-                    makeScriptCard(safeData)
-                end)
-                if okCard then
-                    count = count + 1
-                else
-                    addLog("ERROR", "Could not create ScriptBlox result card: " .. tostring(cardError))
-                end
+                pcall(function() makeScriptCard(scriptData) end)
+                count = count + 1
             end
         end
-
         storeBusy = false
-        StoreStatus.Text = tostring(count) .. " result(s) loaded. Source is copied, not executed."
-        addLog("INFO", "ScriptBlox loaded " .. tostring(count) .. " result(s)")
-        if count == 0 then
-            StoreStatus.Text = "No results in this batch. Try another search term."
-        end
+        StoreStatus.Text = tostring(count) .. " result(s)."
     end)
 end
 
 UI.Button(ScriptBloxPage, "SEARCH SCRIPTS", function()
     local query = string.gsub(StoreSearchBox.Text or "", "^%s*(.-)%s*$", "%1")
-    if query == "" then
-        StoreStatus.Text = "Type a search term first."
-        return
-    end
+    if query == "" then StoreStatus.Text = "Type a search first." return end
     storeQuery = query
     storePage = 1
-    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(query) .. "&max=10&page=1&strict=" .. tostring(storeStrictMatch)
-    fetchScriptBlox(endpoint, false, "Searching ScriptBlox for: " .. query)
+    fetchScriptBlox(ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(query) .. "&max=10&page=1&strict=" .. tostring(storeStrictMatch), false, "Searching...")
 end)
 
 UI.Button(ScriptBloxPage, "TRENDING SCRIPTS", function()
-    storeQuery = ""
-    storePage = 1
-    fetchScriptBlox(ScriptBloxBase .. "/api/script/trending?max=10", false, "Loading trending scripts...")
-end)
-
-UI.Button(ScriptBloxPage, "LOAD MORE SEARCH RESULTS", function()
-    if storeBusy then
-        StoreStatus.Text = "A request is already running. Please wait for it to finish."
-        return
-    end
-    if storeQuery == "" then
-        StoreStatus.Text = "Run a search first. Trending results do not use search pagination here."
-        return
-    end
-    storePage = storePage + 1
-    local endpoint = ScriptBloxBase .. "/api/script/search?q=" .. urlEncode(storeQuery) .. "&max=10&page=" .. tostring(storePage) .. "&strict=" .. tostring(storeStrictMatch)
-    fetchScriptBlox(endpoint, true, "Loading page " .. tostring(storePage) .. "...")
+    fetchScriptBlox(ScriptBloxBase .. "/api/script/trending?max=10", false, "Loading trending...")
 end)
 
 ----------------------------------------------------------------
@@ -1227,17 +922,12 @@ end)
 ----------------------------------------------------------------
 
 UI.Label(LogsPage, "RUNTIME LOGS", 29, 14, C.Text).Font = Enum.Font.GothamBlack
-info(LogsPage, "Shows status changes, ScriptBlox requests and errors captured by EPIC PLANETS.", 43, C.Muted)
+info(LogsPage, "Shows status changes and errors captured by EPIC PLANETS.", 43, C.Muted)
 
 local LogsOutput
-
 refreshLogsPage = function()
     if not LogsOutput or not LogsOutput.Parent then return end
-    if #RuntimeLogs == 0 then
-        LogsOutput.Text = "No log entries yet."
-        return
-    end
-
+    if #RuntimeLogs == 0 then LogsOutput.Text = "No log entries yet." return end
     local lines = {}
     local first = math.max(1, #RuntimeLogs - 59)
     for i = first, #RuntimeLogs do
@@ -1247,52 +937,28 @@ refreshLogsPage = function()
     LogsOutput.Text = table.concat(lines, "\n")
 end
 
-UI.Button(LogsPage, "REFRESH LOGS", function()
-    refreshLogsPage()
-    setStatus("Logs refreshed")
-end)
-
+UI.Button(LogsPage, "REFRESH LOGS", function() refreshLogsPage() end)
 UI.Button(LogsPage, "CLEAR LOGS", function()
     table.clear(RuntimeLogs)
     refreshLogsPage()
-    addLog("INFO", "Log history cleared")
-    setStatus("Logs cleared")
 end)
-
-UI.Button(LogsPage, "COPY LOGS", function()
-    local lines = {}
-    for _, entry in ipairs(RuntimeLogs) do
-        table.insert(lines, "[" .. entry.time .. "] " .. entry.level .. " | " .. entry.message)
-    end
-    local copied, copyError = copyToClipboard(table.concat(lines, "\n"))
-    if copied then
-        setStatus("Logs copied to clipboard")
-    else
-        setStatus(tostring(copyError))
-        addLog("WARN", tostring(copyError))
-    end
-end)
-
 
 LogsOutput = UI.Label(LogsPage, "No log entries yet.", 40, 10, C.Text)
-LogsOutput.Name = "RuntimeLogOutput"
 LogsOutput.Size = UDim2.new(1, -4, 0, 0)
 LogsOutput.AutomaticSize = Enum.AutomaticSize.Y
-LogsOutput.TextWrapped = true
 LogsOutput.TextXAlignment = Enum.TextXAlignment.Left
 LogsOutput.TextYAlignment = Enum.TextYAlignment.Top
 LogsOutput.Font = Enum.Font.Code
 refreshLogsPage()
 
 ----------------------------------------------------------------
--- EXECUTOR HUB: EDITOR + MANUAL EXECUTION + USER API
+-- EXECUTOR PAGE
 ----------------------------------------------------------------
 
 UI.Label(ExecutorPage, "EXECUTOR HUB", 29, 14, C.Text).Font = Enum.Font.GothamBlack
-info(ExecutorPage, "Editor and console for code you trust. Downloaded community scripts are never run automatically.", 48, C.Muted)
+info(ExecutorPage, "Editor and console for code you trust.", 48, C.Muted)
 
 local ExecutorEditor = create("TextBox", {
-    Name = "ExecutorEditor",
     Size = UDim2.new(1, -4, 0, 190),
     BackgroundColor3 = C.PanelAlt,
     BorderSizePixel = 0,
@@ -1310,149 +976,35 @@ local ExecutorEditor = create("TextBox", {
 }, ExecutorPage)
 UI.Round(ExecutorEditor, 7)
 UI.Stroke(ExecutorEditor, C.Blue, 0.45)
-local editorPadding = Instance.new("UIPadding")
-editorPadding.PaddingTop = UDim.new(0, 8)
-editorPadding.PaddingBottom = UDim.new(0, 8)
-editorPadding.PaddingLeft = UDim.new(0, 8)
-editorPadding.PaddingRight = UDim.new(0, 8)
-editorPadding.Parent = ExecutorEditor
 
-local ExecutorStatus = UI.Label(ExecutorPage, "Ready. Execution requires a compatible executor exposing loadstring.", 38, 10, C.Muted)
-ExecutorStatus.TextWrapped = true
+local ExecutorStatus = UI.Label(ExecutorPage, "Ready.", 38, 10, C.Muted)
 
 UI.Button(ExecutorPage, "EXECUTE EDITOR CODE", function()
     local source = ExecutorEditor.Text or ""
     if string.gsub(source, "%s", "") == "" then
         ExecutorStatus.Text = "Editor is empty."
-        addLog("WARN", "Executor: attempted to run empty editor")
         return
     end
-
     local loadFn = BuiltinModules.Executor.Get("loadstring")
     if not loadFn then
-        ExecutorStatus.Text = "loadstring unavailable in this environment."
-        addLog("ERROR", "Executor: loadstring unavailable")
+        ExecutorStatus.Text = "loadstring unavailable."
         return
     end
-
-    ExecutorStatus.Text = "Compiling and running editor code..."
-    addLog("WARN", "Manual editor execution requested")
     task.spawn(function()
-        local compileOK, chunk, compileError = pcall(loadFn, source, "EPIC_PLANETS_Editor")
+        local compileOK, chunk = pcall(loadFn, source)
         if not compileOK or type(chunk) ~= "function" then
-            local message = tostring(compileOK and compileError or chunk)
-            ExecutorStatus.Text = "Compile failed: " .. string.sub(message, 1, 180)
-            addLog("ERROR", "Executor compile failed: " .. message)
+            ExecutorStatus.Text = "Compile failed."
             return
         end
-
         local runOK, result = pcall(chunk)
-        if not runOK then
-            ExecutorStatus.Text = "Runtime error: " .. string.sub(tostring(result), 1, 180)
-            addLog("ERROR", "Executor runtime error: " .. tostring(result))
-        else
-            ExecutorStatus.Text = "Execution finished. Check Logs for captured errors."
-            addLog("INFO", "Editor code finished without an uncaught error")
-        end
+        ExecutorStatus.Text = runOK and "Execution finished." or ("Runtime error: " .. tostring(result))
     end)
 end, 36)
 
-UI.Button(ExecutorPage, "CLEAR EDITOR", function()
-    ExecutorEditor.Text = ""
-    ExecutorStatus.Text = "Editor cleared."
-    addLog("INFO", "Executor editor cleared")
-end, 32)
-
-UI.Label(ExecutorPage, "YOUR API", 25, 12, C.Text).Font = Enum.Font.GothamBlack
-info(ExecutorPage, "Enter the base URL of your own API. Expected search route: /api/scripts/search?q=... . The server response is shown below; adapt the route to your backend if needed.", 55, C.Muted)
-
-local OwnAPIBase = create("TextBox", {
-    Name = "OwnAPIBaseURL",
-    Size = UDim2.new(1, -4, 0, 36),
-    BackgroundColor3 = C.PanelAlt,
-    BorderSizePixel = 0,
-    ClearTextOnFocus = false,
-    PlaceholderText = "https://your-api.example.com",
-    PlaceholderColor3 = C.Muted,
-    Text = "",
-    TextColor3 = C.Text,
-    TextSize = 11,
-    Font = Enum.Font.Code,
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, ExecutorPage)
-UI.Round(OwnAPIBase, 7)
-UI.Stroke(OwnAPIBase, C.Blue, 0.45)
-
-local OwnAPIQuery = create("TextBox", {
-    Name = "OwnAPIQuery",
-    Size = UDim2.new(1, -4, 0, 36),
-    BackgroundColor3 = C.PanelAlt,
-    BorderSizePixel = 0,
-    ClearTextOnFocus = false,
-    PlaceholderText = "Search your API...",
-    PlaceholderColor3 = C.Muted,
-    Text = "",
-    TextColor3 = C.Text,
-    TextSize = 11,
-    Font = Enum.Font.Gotham,
-    TextXAlignment = Enum.TextXAlignment.Left,
-}, ExecutorPage)
-UI.Round(OwnAPIQuery, 7)
-UI.Stroke(OwnAPIQuery, C.Blue, 0.45)
-
-local OwnAPIOutput = UI.Label(ExecutorPage, "API response will appear here.", 90, 10, C.Text)
-OwnAPIOutput.Name = "OwnAPIResponse"
-OwnAPIOutput.Size = UDim2.new(1, -4, 0, 0)
-OwnAPIOutput.AutomaticSize = Enum.AutomaticSize.Y
-OwnAPIOutput.TextWrapped = true
-OwnAPIOutput.TextXAlignment = Enum.TextXAlignment.Left
-OwnAPIOutput.TextYAlignment = Enum.TextYAlignment.Top
-OwnAPIOutput.Font = Enum.Font.Code
-
-UI.Button(ExecutorPage, "QUERY MY API", function()
-    local base = string.gsub(OwnAPIBase.Text or "", "^%s*(.-)%s*$", "%1")
-    base = string.gsub(base, "/+$", "")
-    local query = string.gsub(OwnAPIQuery.Text or "", "^%s*(.-)%s*$", "%1")
-    if base == "" then
-        OwnAPIOutput.Text = "Enter your API base URL first."
-        return
-    end
-    if not string.match(base, "^https?://") then
-        OwnAPIOutput.Text = "URL must begin with http:// or https://"
-        return
-    end
-
-    local endpoint = base .. "/api/scripts/search?q=" .. urlEncode(query)
-    OwnAPIOutput.Text = "Requesting " .. endpoint .. " ..."
-    addLog("INFO", "Custom API request: " .. endpoint)
-    task.spawn(function()
-        local ok, response = pcall(function()
-            return game:HttpGet(endpoint)
-        end)
-        if not ok or type(response) ~= "string" then
-            OwnAPIOutput.Text = "Request failed. Check URL, route, network and executor HTTP support.\n" .. string.sub(tostring(response), 1, 300)
-            addLog("ERROR", "Custom API request failed: " .. tostring(response))
-            return
-        end
-        local shown = response
-        local decodedOK, decoded = pcall(function()
-            return HttpService:JSONDecode(response)
-        end)
-        if decodedOK then
-            local encodeOK, pretty = pcall(function()
-                return HttpService:JSONEncode(decoded)
-            end)
-            if encodeOK then shown = pretty end
-        end
-        OwnAPIOutput.Text = string.sub(shown, 1, 3500)
-        addLog("INFO", "Custom API response received (" .. tostring(#response) .. " bytes)")
-    end)
-end, 34)
-
-info(ExecutorPage, "Security note: only run code you understand. A third-party script can access your game session or modify the experience. API search displays data only; it does not execute the response.", 58, C.Red)
+UI.Button(ExecutorPage, "CLEAR EDITOR", function() ExecutorEditor.Text = "" end, 32)
 
 ----------------------------------------------------------------
--- PERSONALIZATION: MUSIC AND TOUCH SOUNDS
+-- PERSONALIZATION
 ----------------------------------------------------------------
 
 local MusicTracks = {
@@ -1472,7 +1024,6 @@ local MusicTracks = {
         URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Heads%20Will%20Roll%20%28A-Trak%20Remix%20Radio%20Edit%29%20-%20Yeah%20Yeah%20Yeahs%20%28youtube%29.mp3",
         File = "EpicPlanets/EP_Music_Heads_Will_Roll.mp3",
     },
-    -- ✅ TETRIS: música tema do Tetris
     ["Tetris Theme"] = {
         URL = "https://raw.githubusercontent.com/chaloapps011-cyber/EpicPlanets/main/Classicals.de%2B-%2BTetris%2BTheme%2B-%2BKorobeiniki%2B-%2BRearranged%2B-%2BArranged%2Bfor%2BMusic%2BBox.mp3",
         File = "EpicPlanets/EP_Music_Tetris_Theme.mp3",
@@ -1494,21 +1045,8 @@ local TouchTracks = {
     },
 }
 
-local MusicOrder = {
-    "Screenrecorder",
-    "None",
-    "DM iostesso",
-    "Madness Combat 2",
-    "Heads Will Roll",
-    "Tetris Theme", -- ✅ TETRIS
-}
-
-local TouchOrder = {
-    "None",
-    "Maro Jump",
-    "ULTRAKILL Parry",
-    "Sonic Spindash",
-}
+local MusicOrder = { "Screenrecorder", "None", "DM iostesso", "Madness Combat 2", "Heads Will Roll", "Tetris Theme" }
+local TouchOrder = { "None", "Maro Jump", "ULTRAKILL Parry", "Sonic Spindash" }
 
 local selectedMusic = "Screenrecorder"
 local selectedTouch = "None"
@@ -1518,24 +1056,16 @@ local introFlashHappened = false
 local function stopPersonalMusic()
     for key, sound in pairs(personalAudioCache) do
         if string.sub(tostring(key), 1, 6) == "Music:" then
-            pcall(function()
-                sound:Stop()
-            end)
+            pcall(function() sound:Stop() end)
         end
     end
 end
 
 local function preparePersonalAudio(kind, name)
-    if name == "None" then
-        return nil, "None selected"
-    end
-
+    if name == "None" then return nil, "None selected" end
     local tracks = kind == "Music" and MusicTracks or TouchTracks
     local track = tracks[name]
-    if not track then
-        return nil, "Unknown audio: " .. tostring(name)
-    end
-
+    if not track then return nil, "Unknown audio: " .. tostring(name) end
     local cacheKey = kind .. ":" .. name
     local cached = personalAudioCache[cacheKey]
     if cached and cached.Parent then
@@ -1543,7 +1073,6 @@ local function preparePersonalAudio(kind, name)
         cached.Volume = BuiltinModules.Settings.AudioVolume
         return cached
     end
-
     if kind == "Music" and name == "Screenrecorder" then
         local original = ENV.__EPIC_PLANETS_FLASH_SOUND
         if original and original.Parent then
@@ -1554,35 +1083,18 @@ local function preparePersonalAudio(kind, name)
             return original
         end
     end
-
-    local folderOK, folderExists = BuiltinModules.Executor.Call("isfolder", "EpicPlanets")
-    if not folderOK or folderExists ~= true then
-        BuiltinModules.Executor.Call("makefolder", "EpicPlanets")
-    end
-
+    BuiltinModules.Executor.Call("makefolder", "EpicPlanets")
     local fileOK, fileExists = BuiltinModules.Executor.Call("isfile", track.File)
     if not fileOK or fileExists ~= true then
-        local downloadOK, data = pcall(function()
-            return game:HttpGet(track.URL)
-        end)
+        local downloadOK, data = pcall(function() return game:HttpGet(track.URL) end)
         if not downloadOK or type(data) ~= "string" or #data == 0 then
             return nil, "Download failed for " .. name
         end
-
-        local writeOK, writeError = BuiltinModules.Executor.Call("writefile", track.File, data)
-        if not writeOK then
-            return nil, "Could not save " .. name .. ": " .. tostring(writeError)
-        end
+        local writeOK = BuiltinModules.Executor.Call("writefile", track.File, data)
+        if not writeOK then return nil, "Could not save " .. name end
     end
-
     local assetOK, assetId = BuiltinModules.Executor.Call("getcustomasset", track.File)
-    if not assetOK or type(assetId) ~= "string" then
-        assetOK, assetId = BuiltinModules.Executor.Call("getsynasset", track.File)
-    end
-    if not assetOK or type(assetId) ~= "string" then
-        return nil, "Audio asset API unavailable for " .. name
-    end
-
+    if not assetOK or type(assetId) ~= "string" then return nil, "Audio asset API unavailable" end
     local sound = Instance.new("Sound")
     sound.Name = "EPIC_PLANETS_" .. kind .. "_" .. name:gsub("%W", "_")
     sound.SoundId = assetId
@@ -1596,49 +1108,29 @@ end
 local function playPersonalMusic(name, restart)
     stopPersonalMusic()
     if name == "None" then
-        setStatus("Music disabled (None)")
+        setStatus("Music disabled")
         return false
     end
-
     local sound, err = preparePersonalAudio("Music", name)
     if not sound then
         setStatus("Music error: " .. tostring(err))
-        warn("[EPIC PLANETS AUDIO] " .. tostring(err))
         return false
     end
-
     sound.Looped = true
-    sound.Volume = BuiltinModules.Settings.AudioVolume
-    local ok, playError = pcall(function()
-        if restart then
-            sound.TimePosition = 0
-        end
+    pcall(function()
+        if restart then sound.TimePosition = 0 end
         sound:Play()
     end)
-    if not ok then
-        setStatus("Could not play music: " .. tostring(playError))
-        return false
-    end
-
     setStatus("Music: " .. name)
     return true
 end
 
 local function playPersonalTouch()
-    if selectedTouch == "None" then
-        return
-    end
-
-    local sound, err = preparePersonalAudio("Touch", selectedTouch)
-    if not sound then
-        warn("[EPIC PLANETS TOUCH AUDIO] " .. tostring(err))
-        setStatus("Touch sound error")
-        return
-    end
-
+    if selectedTouch == "None" then return end
+    local sound = preparePersonalAudio("Touch", selectedTouch)
+    if not sound then return end
     pcall(function()
         sound.Looped = false
-        sound.Volume = BuiltinModules.Settings.AudioVolume
         sound:Stop()
         sound.TimePosition = 0
         sound:Play()
@@ -1654,9 +1146,8 @@ BuiltinModules.Audio.PlayFlash = function()
     playPersonalMusic(selectedMusic, true)
 end
 
-UI.Label(PersonalizationPage, "PERSONALIZATION", 28, 15, C.Text).Font =
-    Enum.Font.GothamBlack
-info(PersonalizationPage, "Choose the intro music and the sound played when you tap interface buttons.", 42)
+UI.Label(PersonalizationPage, "PERSONALIZATION", 28, 15, C.Text).Font = Enum.Font.GothamBlack
+info(PersonalizationPage, "Choose music and touch sounds.", 42)
 
 local musicChoiceButton
 local touchChoiceButton
@@ -1678,34 +1169,15 @@ musicChoiceButton = UI.Button(PersonalizationPage, "MUSIC: Screenrecorder  [TAP 
     index = (index % #MusicOrder) + 1
     selectedMusic = MusicOrder[index]
     refreshMusicChoice()
-
     if selectedMusic == "None" then
         stopPersonalMusic()
-        setStatus("Music disabled (None)")
     elseif introFlashHappened then
         playPersonalMusic(selectedMusic, true)
-    else
-        task.spawn(function()
-            local _, err = preparePersonalAudio("Music", selectedMusic)
-            if err then
-                warn("[EPIC PLANETS AUDIO] " .. tostring(err))
-                setStatus("Music preload error")
-            else
-                setStatus("Music selected: " .. selectedMusic .. " (starts at intro flash)")
-            end
-        end)
     end
 end, 43)
 
 UI.Button(PersonalizationPage, "PLAY MUSIC PREVIEW", function()
-    if selectedMusic == "None" then
-        stopPersonalMusic()
-        setStatus("Music preview disabled (None)")
-        return
-    end
-    task.spawn(function()
-        playPersonalMusic(selectedMusic, true)
-    end)
+    task.spawn(function() playPersonalMusic(selectedMusic, true) end)
 end, 38)
 
 UI.Button(PersonalizationPage, "STOP MUSIC", function()
@@ -1713,259 +1185,135 @@ UI.Button(PersonalizationPage, "STOP MUSIC", function()
     setStatus("Music stopped")
 end, 38)
 
-UI.Label(PersonalizationPage, "TOUCH SOUND", 22, 12, C.Text).Font =
-    Enum.Font.GothamBold
+UI.Label(PersonalizationPage, "TOUCH SOUND", 22, 12, C.Text).Font = Enum.Font.GothamBold
 
 touchChoiceButton = UI.Button(PersonalizationPage, "TOUCH SOUND: None  [TAP TO CHANGE]", function()
     local index = table.find(TouchOrder, selectedTouch) or 1
     index = (index % #TouchOrder) + 1
     selectedTouch = TouchOrder[index]
     refreshTouchChoice()
-
-    if selectedTouch == "None" then
-        setStatus("Touch sound disabled (None)")
-    else
-        task.spawn(function()
-            local _, err = preparePersonalAudio("Touch", selectedTouch)
-            if err then
-                warn("[EPIC PLANETS TOUCH AUDIO] " .. tostring(err))
-                setStatus("Touch sound preload error")
-            else
-                setStatus("Touch sound selected: " .. selectedTouch)
-            end
-        end)
-    end
 end, 43)
 
 UI.Button(PersonalizationPage, "PLAY TOUCH SOUND PREVIEW", function()
-    if selectedTouch == "None" then
-        setStatus("Touch preview disabled (None)")
-        return
-    end
     task.spawn(playPersonalTouch)
 end, 38)
 
-info(PersonalizationPage, "Defaults: Screenrecorder music, None touch sound.", 32, C.Blue)
-info(PersonalizationPage, "If an MP3 fails to load, check the GitHub file URL and executor file/asset support.", 45)
-
 local function hookPersonalTouch(object)
-    if not object or not (object:IsA("TextButton") or object:IsA("ImageButton")) then
-        return
-    end
-    if object:GetAttribute("EP_PersonalTouchHooked") then
-        return
-    end
+    if not object or not (object:IsA("TextButton") or object:IsA("ImageButton")) then return end
+    if object:GetAttribute("EP_PersonalTouchHooked") then return end
     object:SetAttribute("EP_PersonalTouchHooked", true)
-    connect(object.Activated, function()
-        playPersonalTouch()
-    end)
+    connect(object.Activated, function() playPersonalTouch() end)
 end
 
-for _, object in ipairs(GUI:GetDescendants()) do
-    hookPersonalTouch(object)
-end
-
+for _, object in ipairs(GUI:GetDescendants()) do hookPersonalTouch(object) end
 connect(GUI.DescendantAdded, function(object)
-    task.defer(function()
-        if GUI.Parent then
-            hookPersonalTouch(object)
-        end
-    end)
+    task.defer(function() if GUI.Parent then hookPersonalTouch(object) end end)
 end)
 
-task.spawn(function()
-    local _, err = preparePersonalAudio("Music", selectedMusic)
-    if err then
-        warn("[EPIC PLANETS AUDIO] Default music preload issue: " .. tostring(err))
-    end
-end)
+task.spawn(function() preparePersonalAudio("Music", selectedMusic) end)
 
 ----------------------------------------------------------------
 -- HOME
 ----------------------------------------------------------------
 
-local homeTitle = UI.Label(
-    HomePage,
-    "EPIC PLANETS",
-    28,
-    16,
-    C.Text
-)
-
-homeTitle.Font = Enum.Font.GothamBlack
-
-info(
-    HomePage,
-    "Dark modular interface with a 321-fragment intro, planets, audio and built-in components.",
-    54
-)
-
+UI.Label(HomePage, "EPIC PLANETS", 28, 16, C.Text).Font = Enum.Font.GothamBlack
+info(HomePage, "Dark modular interface with 321-fragment intro, planets, audio and built-in components.", 54)
 info(HomePage, "Player: " .. Player.Name, 24, C.Text)
 info(HomePage, "Place ID: " .. tostring(game.PlaceId), 24)
 info(HomePage, "BuiltinModules: " .. BuiltinModules.Version, 24, C.Blue)
 
-UI.Button(HomePage, "OPEN BUILTINMODULES", function()
-    showPage("BuiltinModules")
-end)
-
+UI.Button(HomePage, "OPEN BUILTINMODULES", function() showPage("BuiltinModules") end)
 UI.Button(HomePage, "MINIMIZE TO EP ICON", function()
     Hub.Visible = false
     Mini.Visible = true
-    setStatus("Minimized")
 end)
 
 ----------------------------------------------------------------
 -- PLAYER
 ----------------------------------------------------------------
 
-UI.Label(PlayerPage, "PLAYER CONTROLS", 27, 14, C.Text).Font =
-    Enum.Font.GothamBold
-
-info(
-    PlayerPage,
-    "Client-side movement controls. A game can override these values.",
-    44
-)
+UI.Label(PlayerPage, "PLAYER CONTROLS", 27, 14, C.Text).Font = Enum.Font.GothamBold
+info(PlayerPage, "Client-side movement controls.", 44)
 
 local speedEnabled = false
 local jumpEnabled = false
 local flyEnabled = false
-
-local oldSpeed
-local oldJumpPower
-local oldJumpHeight
-
-local flyVelocity
-local flyGyro
+local oldSpeed, oldJumpPower, oldJumpHeight
+local flyVelocity, flyGyro
 local vertical = 0
 
 local function getCharacterParts()
     local character = Player.Character
-
-    if not character then
-        return nil, nil
-    end
-
-    return character:FindFirstChildOfClass("Humanoid"),
-        character:FindFirstChild("HumanoidRootPart")
+    if not character then return nil, nil end
+    return character:FindFirstChildOfClass("Humanoid"), character:FindFirstChild("HumanoidRootPart")
 end
 
 UI.Button(PlayerPage, "TOGGLE SPEED", function(button)
     local humanoid = getCharacterParts()
-
-    if not humanoid then
-        setStatus("Character not ready")
-        return
-    end
-
+    if not humanoid then setStatus("Character not ready") return end
     if not speedEnabled then
         oldSpeed = humanoid.WalkSpeed
         humanoid.WalkSpeed = 32
         speedEnabled = true
         button.Text = "SPEED: ON"
     else
-        if oldSpeed then
-            humanoid.WalkSpeed = oldSpeed
-        end
-
+        if oldSpeed then humanoid.WalkSpeed = oldSpeed end
         speedEnabled = false
         button.Text = "TOGGLE SPEED"
     end
-
-    setStatus(speedEnabled and "Speed enabled" or "Speed restored")
 end)
 
 UI.Button(PlayerPage, "TOGGLE HIGH JUMP", function(button)
     local humanoid = getCharacterParts()
-
-    if not humanoid then
-        setStatus("Character not ready")
-        return
-    end
-
+    if not humanoid then setStatus("Character not ready") return end
     if not jumpEnabled then
         oldJumpPower = humanoid.JumpPower
         oldJumpHeight = humanoid.JumpHeight
-
-        if humanoid.UseJumpPower then
-            humanoid.JumpPower = 100
-        else
-            humanoid.JumpHeight = 50
-        end
-
+        if humanoid.UseJumpPower then humanoid.JumpPower = 100
+        else humanoid.JumpHeight = 50 end
         jumpEnabled = true
         button.Text = "HIGH JUMP: ON"
     else
         if humanoid.UseJumpPower then
-            if oldJumpPower then
-                humanoid.JumpPower = oldJumpPower
-            end
+            if oldJumpPower then humanoid.JumpPower = oldJumpPower end
         elseif oldJumpHeight then
             humanoid.JumpHeight = oldJumpHeight
         end
-
         jumpEnabled = false
         button.Text = "TOGGLE HIGH JUMP"
     end
-
-    setStatus(jumpEnabled and "High jump enabled" or "Jump restored")
 end)
 
 local function setFly(enabled)
     local humanoid, root = getCharacterParts()
-
-    if enabled and (not humanoid or not root) then
-        setStatus("Character not ready")
-        return
-    end
-
+    if enabled and (not humanoid or not root) then setStatus("Character not ready") return end
     if enabled then
-        if flyVelocity then
-            flyVelocity:Destroy()
-        end
-
-        if flyGyro then
-            flyGyro:Destroy()
-        end
-
+        if flyVelocity then flyVelocity:Destroy() end
+        if flyGyro then flyGyro:Destroy() end
         flyVelocity = create("BodyVelocity", {
             Name = "EP_FlyVelocity",
             MaxForce = Vector3.new(1e9, 1e9, 1e9),
             P = 12000,
             Velocity = Vector3.zero,
         }, root)
-
         flyGyro = create("BodyGyro", {
             Name = "EP_FlyGyro",
             MaxTorque = Vector3.new(1e9, 1e9, 1e9),
             P = 9000,
             CFrame = root.CFrame,
         }, root)
-
         humanoid.AutoRotate = false
         flyEnabled = true
         vertical = 0
     else
         flyEnabled = false
         vertical = 0
-
-        if flyVelocity then
-            flyVelocity:Destroy()
-        end
-
-        if flyGyro then
-            flyGyro:Destroy()
-        end
-
+        if flyVelocity then flyVelocity:Destroy() end
+        if flyGyro then flyGyro:Destroy() end
         flyVelocity = nil
         flyGyro = nil
-
-        if humanoid then
-            humanoid.AutoRotate = true
-        end
+        if humanoid then humanoid.AutoRotate = true end
     end
-
-    setStatus(flyEnabled and "Fly enabled" or "Fly disabled")
 end
 
 UI.Button(PlayerPage, "TOGGLE FLY", function(button)
@@ -1973,133 +1321,55 @@ UI.Button(PlayerPage, "TOGGLE FLY", function(button)
     button.Text = flyEnabled and "FLY: ON" or "TOGGLE FLY"
 end)
 
-local verticalRow = create("Frame", {
-    Size = UDim2.new(1, -4, 0, 42),
-    BackgroundTransparency = 1,
-}, PlayerPage)
-
+local verticalRow = create("Frame", { Size = UDim2.new(1, -4, 0, 42), BackgroundTransparency = 1 }, PlayerPage)
 local upButton = create("TextButton", {
-    Size = UDim2.new(0.49, 0, 1, 0),
-    BackgroundColor3 = C.PanelAlt,
-    BorderSizePixel = 0,
-    Text = "HOLD UP",
-    TextColor3 = C.Text,
-    TextSize = 11,
-    Font = Enum.Font.GothamBold,
+    Size = UDim2.new(0.49, 0, 1, 0), BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0,
+    Text = "HOLD UP", TextColor3 = C.Text, TextSize = 11, Font = Enum.Font.GothamBold,
 }, verticalRow)
-
 UI.Round(upButton, 6)
-
 local downButton = create("TextButton", {
-    Position = UDim2.new(0.51, 0, 0, 0),
-    Size = UDim2.new(0.49, 0, 1, 0),
-    BackgroundColor3 = C.PanelAlt,
-    BorderSizePixel = 0,
-    Text = "HOLD DOWN",
-    TextColor3 = C.Text,
-    TextSize = 11,
-    Font = Enum.Font.GothamBold,
+    Position = UDim2.new(0.51, 0, 0, 0), Size = UDim2.new(0.49, 0, 1, 0),
+    BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0,
+    Text = "HOLD DOWN", TextColor3 = C.Text, TextSize = 11, Font = Enum.Font.GothamBold,
 }, verticalRow)
-
 UI.Round(downButton, 6)
 
 local function holdAltitude(button, value)
     connect(button.InputBegan, function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-            if flyEnabled then
-                vertical = value
-            else
-                setStatus("Activate Fly first")
-            end
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            if flyEnabled then vertical = value else setStatus("Activate Fly first") end
         end
     end)
-
-    connect(button.InputEnded, function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-            or input.UserInputType == Enum.UserInputType.MouseButton1 then
-
-            if vertical == value then
-                vertical = 0
-            end
-        end
+    connect(button.InputEnded, function()
+        if vertical == value then vertical = 0 end
     end)
 end
-
 holdAltitude(upButton, 1)
 holdAltitude(downButton, -1)
-
-info(
-    PlayerPage,
-    "Activate Fly, steer with the movement joystick, and hold UP or DOWN for altitude.",
-    48
-)
 
 ----------------------------------------------------------------
 -- BUILTINMODULES PAGE
 ----------------------------------------------------------------
 
-UI.Label(BuiltinPage, "BUILTINMODULES", 27, 14, C.Text).Font =
-    Enum.Font.GothamBlack
+UI.Label(BuiltinPage, "BUILTINMODULES", 27, 14, C.Text).Font = Enum.Font.GothamBlack
+info(BuiltinPage, "Internal components of Main.lua.", 32)
 
-info(
-    BuiltinPage,
-    "Internal components that run inside Main.lua.",
-    32
-)
-
-local function componentInfo(name, description)
-    UI.Button(BuiltinPage, name, function()
-        setStatus(description)
-    end, 36)
-end
-
-componentInfo("UI", "UI module: buttons, labels, frames and animations.")
-componentInfo("Audio", "Audio module: MP3 preparation and flash playback.")
-componentInfo("ModuleLoader", "ModuleLoader: scans local Lua module files.")
-componentInfo("Settings", "Settings: audio, intro and visual options.")
-componentInfo("Animations", "Animations: intro fragments and orbital effects.")
-
-UI.Button(BuiltinPage, "REPLAY FLASH AUDIO", function()
-    BuiltinModules.Audio.PlayFlash()
-    setStatus("Flash audio requested")
-end)
-
-info(
-    BuiltinPage,
-    "The title 'don't touch In builtinmodules' is one of the random titles.",
-    42,
-    C.Blue
-)
+UI.Button(BuiltinPage, "REPLAY FLASH AUDIO", function() BuiltinModules.Audio.PlayFlash() end)
+info(BuiltinPage, "The title 'don't touch In builtinmodules' is one of the random titles.", 42, C.Blue)
 
 ----------------------------------------------------------------
--- MOVESETS / LOCAL LUA MODULES
+-- MOVESETS
 ----------------------------------------------------------------
 
-UI.Label(MovesetsPage, "MOVESETS / MODULES", 27, 14, C.Text).Font =
-    Enum.Font.GothamBold
-
-info(
-    MovesetsPage,
-    "Place your local .lua modules in this folder:",
-    32
-)
-
-info(
-    MovesetsPage,
-    BuiltinModules.ModuleLoader.Folder,
-    30,
-    C.Blue
-)
+UI.Label(MovesetsPage, "MOVESETS / MODULES", 27, 14, C.Text).Font = Enum.Font.GothamBold
+info(MovesetsPage, "Local .lua modules folder:", 32)
+info(MovesetsPage, BuiltinModules.ModuleLoader.Folder, 30, C.Blue)
 
 local moduleList = create("Frame", {
-    Name = "ModuleList",
     Size = UDim2.new(1, -4, 0, 0),
     AutomaticSize = Enum.AutomaticSize.Y,
     BackgroundTransparency = 1,
 }, MovesetsPage)
-
 local moduleLayout = Instance.new("UIListLayout")
 moduleLayout.Padding = UDim.new(0, 6)
 moduleLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -2107,88 +1377,54 @@ moduleLayout.Parent = moduleList
 
 local function refreshModules()
     for _, child in ipairs(moduleList:GetChildren()) do
-        if child:IsA("GuiObject") then
-            child:Destroy()
-        end
+        if child:IsA("GuiObject") then child:Destroy() end
     end
-
     local files, message = BuiltinModules.ModuleLoader.List()
-
     if not files then
         info(moduleList, message or "Could not scan folder.", 44, C.Red)
-        setStatus("Module scan failed")
         return
     end
-
     local count = 0
-
     for _, path in ipairs(files) do
-        if type(path) == "string"
-            and path:lower():sub(-4) == ".lua" then
-
+        if type(path) == "string" and path:lower():sub(-4) == ".lua" then
             count = count + 1
-
             local filePath = path
             local fileName = path:match("[^/\\]+$") or path
-
             UI.Button(moduleList, "RUN  " .. fileName, function()
-                local ok, result =
-                    BuiltinModules.ModuleLoader.Run(filePath)
-
+                local ok, result = BuiltinModules.ModuleLoader.Run(filePath)
                 setStatus(ok and result or ("Error: " .. tostring(result)))
             end, 38)
         end
     end
-
     if count == 0 then
-        info(
-            moduleList,
-            "No .lua files found. Add one to the folder above.",
-            45
-        )
+        info(moduleList, "No .lua files found.", 45)
     end
-
-    setStatus("Found " .. tostring(count) .. " module(s)")
 end
 
 UI.Button(MovesetsPage, "REFRESH MODULES", refreshModules)
 
 ----------------------------------------------------------------
--- MODEL STORE
+-- MODELS
 ----------------------------------------------------------------
 
-UI.Label(ModelsPage, "MODEL STORE", 27, 14, C.Text).Font =
-    Enum.Font.GothamBold
-
-info(
-    ModelsPage,
-    "Install client-side visual models that follow your character.",
-    42
-)
+UI.Label(ModelsPage, "MODEL STORE", 27, 14, C.Text).Font = Enum.Font.GothamBold
+info(ModelsPage, "Install client-side visual models.", 42)
 
 local installedModels = ENV.__EPIC_PLANETS_MODELS
 
 local function createOrbitalCore()
     local character = Player.Character
     local head = character and character:FindFirstChild("Head")
-
-    if not head then
-        setStatus("Character head not ready")
-        return
-    end
-
+    if not head then setStatus("Character head not ready") return end
     for _, oldEntry in ipairs(installedModels) do
-        if type(oldEntry) == "table" and oldEntry.model
-            and oldEntry.model.Name == "EP_OrbitalCore" then
+        if type(oldEntry) == "table" and oldEntry.model and oldEntry.model.Name == "EP_OrbitalCore" then
             pcall(function() oldEntry.model:Destroy() end)
         end
     end
     table.clear(installedModels)
-
     local model = Instance.new("Model")
     model.Name = "EP_OrbitalCore"
     model.Parent = Workspace
-
     local center = Instance.new("Part")
     center.Name = "Core"
     center.Shape = Enum.PartType.Ball
@@ -2198,9 +1434,7 @@ local function createOrbitalCore()
     center.Material = Enum.Material.Neon
     center.Color = C.Blue
     center.Parent = model
-
     local planets = {}
-
     for i = 1, 4 do
         local planet = Instance.new("Part")
         planet.Name = "Planet" .. i
@@ -2211,53 +1445,22 @@ local function createOrbitalCore()
         planet.Material = Enum.Material.Neon
         planet.Color = PlanetColors[i]
         planet.Parent = model
-
         planets[i] = planet
     end
-
     model.PrimaryPart = center
-
-    table.insert(installedModels, {
-        model = model,
-        center = center,
-        planets = planets,
-    })
-
+    table.insert(installedModels, { model = model, center = center, planets = planets })
     setStatus("Orbital Core installed")
 end
 
-local function removeModels()
-    for _, entry in ipairs(installedModels) do
-        if typeof(entry) == "Instance" then
-            pcall(function()
-                entry:Destroy()
-            end)
-        elseif type(entry) == "table" and entry.model then
-            pcall(function()
-                entry.model:Destroy()
-            end)
-        end
-    end
-
-    table.clear(installedModels)
-    setStatus("Removed installed models")
-end
-
 UI.Button(ModelsPage, "ADD ORBITAL CORE TO HEAD", createOrbitalCore)
-
-UI.Button(ModelsPage, "REMOVE ORBITAL CORE", function()
-    for i = #installedModels, 1, -1 do
-        local entry = installedModels[i]
-        if type(entry) == "table" and entry.model
-            and entry.model.Name == "EP_OrbitalCore" then
+UI.Button(ModelsPage, "REMOVE ALL", function()
+    for _, entry in ipairs(installedModels) do
+        if type(entry) == "table" and entry.model then
             pcall(function() entry.model:Destroy() end)
-            table.remove(installedModels, i)
         end
     end
-    setStatus("Orbital Core removed")
+    table.clear(installedModels)
 end)
-
-UI.Button(ModelsPage, "REMOVE ALL INSTALLED MODELS", removeModels)
 
 task.spawn(function()
     for _ = 1, 20 do
@@ -2267,64 +1470,33 @@ task.spawn(function()
         end
         task.wait(0.25)
     end
-    setStatus("Orbital Core skipped: character head unavailable")
 end)
 
 ----------------------------------------------------------------
 -- SETTINGS
 ----------------------------------------------------------------
 
-UI.Label(SettingsPage, "SETTINGS", 27, 14, C.Text).Font =
-    Enum.Font.GothamBold
-
-info(
-    SettingsPage,
-    "Configure the internal features of EPIC PLANETS.",
-    36
-)
+UI.Label(SettingsPage, "SETTINGS", 27, 14, C.Text).Font = Enum.Font.GothamBold
+info(SettingsPage, "Configure EPIC PLANETS.", 36)
 
 UI.Button(SettingsPage, "RANDOMIZE TITLE", function()
     local oldTitle = Title
-
     repeat
-        Title = BuiltinModules.Titles[
-            math.random(1, #BuiltinModules.Titles)
-        ]
+        Title = BuiltinModules.Titles[math.random(1, #BuiltinModules.Titles)]
     until #BuiltinModules.Titles == 1 or Title ~= oldTitle
-
     Header.Text = Title
     IntroTitle.Text = Title
-
-    setStatus("Title changed: " .. Title)
 end)
 
 UI.Button(SettingsPage, "TOGGLE FLASH AUDIO", function(button)
-    BuiltinModules.Settings.FlashAudio =
-        not BuiltinModules.Settings.FlashAudio
-
-    button.Text = BuiltinModules.Settings.FlashAudio
-        and "FLASH AUDIO: ON"
-        or "FLASH AUDIO: OFF"
-
-    setStatus("Flash audio updated")
-end)
-
-UI.Button(SettingsPage, "PLAY TEST AUDIO", function()
-    BuiltinModules.Audio.PlayFlash()
-    setStatus("Audio test requested")
+    BuiltinModules.Settings.FlashAudio = not BuiltinModules.Settings.FlashAudio
+    button.Text = BuiltinModules.Settings.FlashAudio and "FLASH AUDIO: ON" or "FLASH AUDIO: OFF"
 end)
 
 UI.Button(SettingsPage, "MINIMIZE WINDOW", function()
     Hub.Visible = false
     Mini.Visible = true
-    setStatus("Minimized")
 end)
-
-info(
-    SettingsPage,
-    "The MP3 is prepared locally before the intro flash.",
-    38
-)
 
 ----------------------------------------------------------------
 -- WINDOW CONTROLS
@@ -2342,36 +1514,22 @@ end)
 
 connect(TapIn.Activated, function()
     IntroStatus.Text = "SYSTEMS READY"
-
-    tween(IntroPanel, 0.22, {
-        BackgroundTransparency = 1,
-        Position = UDim2.fromScale(0.5, 0.48),
-    })
-
+    tween(IntroPanel, 0.22, { BackgroundTransparency = 1, Position = UDim2.fromScale(0.5, 0.48) })
     task.wait(0.23)
-
     Intro.Visible = false
     Hub.Visible = true
     Hub.Size = UDim2.new(0.84, 0, 0.68, 0)
     Hub.BackgroundTransparency = 1
-
-    tween(Hub, 0.28, {
-        Size = UDim2.new(0.91, 0, 0.74, 0),
-        BackgroundTransparency = 0,
-    }, Enum.EasingStyle.Back)
-
+    tween(Hub, 0.28, { Size = UDim2.new(0.91, 0, 0.74, 0), BackgroundTransparency = 0 }, Enum.EasingStyle.Back)
     showPage("Home")
 end)
 
 ----------------------------------------------------------------
--- DRAG WINDOW: MOUSE + TOUCH, WITH VIEWPORT CLAMPING
+-- DRAG WINDOW
 ----------------------------------------------------------------
 
 local dragging = false
-local dragStart
-local startPosition
-local activeTouch
-local dragInput
+local dragStart, startPosition, activeTouch, dragInput
 
 local function stopDragging()
     dragging = false
@@ -2382,87 +1540,53 @@ local function stopDragging()
 end
 
 local function applyDrag(input)
-    if not dragging or not dragStart or not startPosition then
-        return
-    end
-
+    if not dragging or not dragStart or not startPosition then return end
     local camera = Workspace.CurrentCamera
     local viewport = camera and camera.ViewportSize
-    if not viewport then
-        return
-    end
-
+    if not viewport then return end
     local delta = input.Position - dragStart
     local startCenterX = viewport.X * startPosition.X.Scale + startPosition.X.Offset
     local startCenterY = viewport.Y * startPosition.Y.Scale + startPosition.Y.Offset
     local centerX = startCenterX + delta.X
     local centerY = startCenterY + delta.Y
-
     local halfW = Hub.AbsoluteSize.X / 2
     local halfH = Hub.AbsoluteSize.Y / 2
-    local marginX = 40
-    local marginY = 28
-
-    local minX, maxX
-    if Hub.AbsoluteSize.X <= viewport.X then
-        minX, maxX = halfW, viewport.X - halfW
-    else
-        minX, maxX = marginX - halfW, viewport.X - marginX + halfW
-    end
-
-    local minY, maxY
-    if Hub.AbsoluteSize.Y <= viewport.Y then
-        minY, maxY = halfH, viewport.Y - halfH
-    else
-        minY, maxY = marginY - halfH, viewport.Y - marginY + halfH
-    end
-
+    local marginX, marginY = 40, 28
+    local minX, maxX, minY, maxY
+    if Hub.AbsoluteSize.X <= viewport.X then minX, maxX = halfW, viewport.X - halfW
+    else minX, maxX = marginX - halfW, viewport.X - marginX + halfW end
+    if Hub.AbsoluteSize.Y <= viewport.Y then minY, maxY = halfH, viewport.Y - halfH
+    else minY, maxY = marginY - halfH, viewport.Y - marginY + halfH end
     centerX = math.clamp(centerX, minX, maxX)
     centerY = math.clamp(centerY, minY, maxY)
-
     Hub.Position = UDim2.new(
-        startPosition.X.Scale,
-        centerX - viewport.X * startPosition.X.Scale,
-        startPosition.Y.Scale,
-        centerY - viewport.Y * startPosition.Y.Scale
+        startPosition.X.Scale, centerX - viewport.X * startPosition.X.Scale,
+        startPosition.Y.Scale, centerY - viewport.Y * startPosition.Y.Scale
     )
 end
 
 connect(Header.InputBegan, function(input)
-    local inputType = input.UserInputType
-    if inputType ~= Enum.UserInputType.Touch
-        and inputType ~= Enum.UserInputType.MouseButton1 then
-        return
-    end
-
+    if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
     dragging = true
     dragStart = input.Position
     startPosition = Hub.Position
-    activeTouch = inputType == Enum.UserInputType.Touch and input or nil
+    activeTouch = input.UserInputType == Enum.UserInputType.Touch and input or nil
 end)
 
 connect(Header.InputChanged, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch then
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
         dragInput = input
     end
 end)
 
 connect(UserInputService.InputChanged, function(input)
-    if dragging and dragInput and input == dragInput then
-        applyDrag(input)
-    elseif dragging and input.UserInputType == Enum.UserInputType.MouseMovement
-        and activeTouch == nil then
-        applyDrag(input)
-    end
+    if dragging and dragInput and input == dragInput then applyDrag(input)
+    elseif dragging and input.UserInputType == Enum.UserInputType.MouseMovement and activeTouch == nil then applyDrag(input) end
 end)
 
 connect(UserInputService.InputEnded, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        stopDragging()
-    elseif activeTouch and input == activeTouch then
-        stopDragging()
-    end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then stopDragging()
+    elseif activeTouch and input == activeTouch then stopDragging() end
 end)
 
 ----------------------------------------------------------------
@@ -2473,81 +1597,39 @@ BuiltinModules.Animations = {}
 
 function BuiltinModules.Animations.PlayIntro()
     local total = #Fragments
-
     for i, fragment in ipairs(Fragments) do
-        if not GUI.Parent then
-            return
-        end
-
+        if not GUI.Parent then return end
         local x = ((i - 1) % 29) / 28
         local y = math.floor((i - 1) / 29) / 11
-
         tween(fragment, 0.38 + math.random() * 0.42, {
             Position = UDim2.fromScale(x, math.clamp(y, 0, 1)),
         }, Enum.EasingStyle.Quint)
-
         if i % 5 == 0 or i == total then
-            tween(Progress, 0.12, {
-                Size = UDim2.new(i / total, 0, 1, 0),
-            })
-
+            tween(Progress, 0.12, { Size = UDim2.new(i / total, 0, 1, 0) })
             FragmentCount.Text = i .. " / " .. total
         end
-
         task.wait(0.002)
     end
-
     task.wait(0.55)
-
     IntroStatus.Text = "ALL FRAGMENTS CONNECTED"
-
-    for _, fragment in ipairs(Fragments) do
-        fragment.BackgroundColor3 = C.Text
-    end
-
+    for _, fragment in ipairs(Fragments) do fragment.BackgroundColor3 = C.Text end
     BuiltinModules.Audio.PlayFlash()
-
-    tween(IntroPanel, 0.08, {
-        BackgroundColor3 = Color3.fromRGB(90, 95, 115),
-    })
-
+    tween(IntroPanel, 0.08, { BackgroundColor3 = Color3.fromRGB(90, 95, 115) })
     task.wait(0.1)
-
-    tween(IntroPanel, 0.16, {
-        BackgroundColor3 = C.Panel,
-    })
-
+    tween(IntroPanel, 0.16, { BackgroundColor3 = C.Panel })
     for _, fragment in ipairs(Fragments) do
-        tween(fragment, 1.45, {
-            BackgroundTransparency = 1,
-            Size = UDim2.fromOffset(0, 0),
-        }, Enum.EasingStyle.Sine)
+        tween(fragment, 1.45, { BackgroundTransparency = 1, Size = UDim2.fromOffset(0, 0) }, Enum.EasingStyle.Sine)
     end
-
-    tween(Progress, 1.45, {
-        BackgroundTransparency = 1,
-    })
-
-    tween(FragmentCount, 1.45, {
-        TextTransparency = 1,
-    })
-
+    tween(Progress, 1.45, { BackgroundTransparency = 1 })
+    tween(FragmentCount, 1.45, { TextTransparency = 1 })
     task.wait(1.55)
-
-    if not GUI.Parent then
-        return
-    end
-
+    if not GUI.Parent then return end
     FragmentArea.Visible = false
     IntroStatus.Text = "ALL SYSTEMS READY"
     TapIn.Visible = true
     TapIn.BackgroundTransparency = 1
     TapIn.TextTransparency = 1
-
-    tween(TapIn, 0.45, {
-        BackgroundTransparency = 0,
-        TextTransparency = 0,
-    })
+    tween(TapIn, 0.45, { BackgroundTransparency = 0, TextTransparency = 0 })
 end
 
 ----------------------------------------------------------------
@@ -2555,96 +1637,54 @@ end
 ----------------------------------------------------------------
 
 local rainbowObjects = {}
-
 for _, object in ipairs(GUI:GetDescendants()) do
-    if object:IsA("UIStroke") then
-        table.insert(rainbowObjects, object)
-    end
+    if object:IsA("UIStroke") then table.insert(rainbowObjects, object) end
 end
 
 connect(RunService.RenderStepped, function()
     local now = os.clock()
     local hue = (now * 0.12) % 1
-
     if BuiltinModules.Settings.Rainbow then
         for _, stroke in ipairs(rainbowObjects) do
             if stroke and stroke.Parent then
-                stroke.Color = Color3.fromHSV(
-                    (hue + 0.025) % 1,
-                    0.88,
-                    1
-                )
+                stroke.Color = Color3.fromHSV((hue + 0.025) % 1, 0.88, 1)
             end
         end
     end
-
     if Intro.Visible then
         for i, planet in ipairs(Planets) do
-            local angle =
-                now * (0.75 + i * 0.12)
-                + (i - 1) * math.pi / 2
-
-            planet.Position = UDim2.fromOffset(
-                75 + math.cos(angle) * 42,
-                54 + math.sin(angle) * 32
-            )
+            local angle = now * (0.75 + i * 0.12) + (i - 1) * math.pi / 2
+            planet.Position = UDim2.fromOffset(75 + math.cos(angle) * 42, 54 + math.sin(angle) * 32)
         end
-
         Core.Rotation = (now * 35) % 360
     end
-
     if flyEnabled then
         local humanoid, root = getCharacterParts()
-
-        if not humanoid or not root
-            or not flyVelocity or not flyVelocity.Parent then
-
+        if not humanoid or not root or not flyVelocity or not flyVelocity.Parent then
             setFly(false)
         else
-            local direction = humanoid.MoveDirection
-
-            flyVelocity.Velocity =
-                direction * 48 + Vector3.new(0, vertical * 38, 0)
-
+            flyVelocity.Velocity = humanoid.MoveDirection * 48 + Vector3.new(0, vertical * 38, 0)
             local camera = Workspace.CurrentCamera
-
             if camera and flyGyro and flyGyro.Parent then
-                flyGyro.CFrame = CFrame.new(
-                    root.Position,
-                    root.Position + camera.CFrame.LookVector
-                )
+                flyGyro.CFrame = CFrame.new(root.Position, root.Position + camera.CFrame.LookVector)
             end
         end
     end
-
     for i = #installedModels, 1, -1 do
         local entry = installedModels[i]
-
-        if type(entry) ~= "table"
-            or not entry.model
-            or not entry.model.Parent then
-
+        if type(entry) ~= "table" or not entry.model or not entry.model.Parent then
             table.remove(installedModels, i)
         else
             local character = Player.Character
             local head = character and character:FindFirstChild("Head")
-
             if head and entry.center and entry.center.Parent then
                 local base = head.CFrame * CFrame.new(0, 1.15, 0)
-
                 entry.center.CFrame = base
-
                 for index, planet in ipairs(entry.planets) do
-                    local angle =
-                        now * 1.1 + (index - 1) * math.pi / 2
-
-                    local offset = Vector3.new(
-                        math.cos(angle) * 1.0,
-                        math.sin(angle * 1.4) * 0.18,
-                        math.sin(angle) * 1.0
-                    )
-
-                    planet.CFrame = CFrame.new(base.Position + offset)
+                    local angle = now * 1.1 + (index - 1) * math.pi / 2
+                    planet.CFrame = CFrame.new(base.Position + Vector3.new(
+                        math.cos(angle) * 1.0, math.sin(angle * 1.4) * 0.18, math.sin(angle) * 1.0
+                    ))
                 end
             end
         end
@@ -2657,43 +1697,33 @@ end)
 
 connect(Player.CharacterAdded, function()
     task.wait(0.8)
-
     local humanoid = getCharacterParts()
-
     if humanoid then
         if speedEnabled then
             oldSpeed = humanoid.WalkSpeed
             humanoid.WalkSpeed = 32
         end
-
         if jumpEnabled then
             oldJumpPower = humanoid.JumpPower
             oldJumpHeight = humanoid.JumpHeight
-
-            if humanoid.UseJumpPower then
-                humanoid.JumpPower = 100
-            else
-                humanoid.JumpHeight = 50
-            end
+            if humanoid.UseJumpPower then humanoid.JumpPower = 100
+            else humanoid.JumpHeight = 50 end
         end
     end
-
-    if flyEnabled then
-        setFly(false)
-    end
+    if flyEnabled then setFly(false) end
 end)
 
 ----------------------------------------------------------------
--- ✅ TETRIS PAGE CONTENT
+-- TETRIS PAGE
 ----------------------------------------------------------------
 
 UI.Label(TetrisPage, "TETRIS", 29, 16, C.Text).Font = Enum.Font.GothamBlack
-info(TetrisPage, "Jogue Tetris clássico em uma janela separada. A música tema toca automaticamente.", 44)
-info(TetrisPage, "PC: ← → mover · ↑/W rotacionar · ↓/S descer · Espaço = hard drop", 32, C.Blue)
-info(TetrisPage, "Mobile: use os botões na tela do jogo", 24)
+info(TetrisPage, "Play classic Tetris in a separate window with themed music.", 44)
+info(TetrisPage, "PC: ← → move · ↑/W rotate · ↓/S soft drop · Space = hard drop", 32, C.Blue)
+info(TetrisPage, "Mobile: use the on-screen buttons", 24)
 
 ----------------------------------------------------------------
--- ✅ TETRIS GUI (janela separada)
+-- TETRIS GUI
 ----------------------------------------------------------------
 
 local TetrisGUI = create("ScreenGui", {
@@ -2704,7 +1734,6 @@ local TetrisGUI = create("ScreenGui", {
     ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     Enabled = false,
 }, PlayerGui)
-
 ENV.__EPIC_PLANETS_TETRIS_GUI = TetrisGUI
 
 local TCOLS, TROWS, TCELL = 10, 20, 18
@@ -2735,6 +1764,38 @@ local TWin = create("Frame", {
 }, TetrisGUI)
 UI.Round(TWin, 12)
 UI.Stroke(TWin, C.Purple, 0.05)
+
+local TScale = Instance.new("UIScale")
+TScale.Parent = TWin
+
+local TNATIVE_W, TNATIVE_H = 400, 580
+
+local function updateTetrisScale()
+    local camera = Workspace.CurrentCamera
+    if not camera then return end
+    local vp = camera.ViewportSize
+    local sx = (vp.X * 0.92) / TNATIVE_W
+    local sy = (vp.Y * 0.92) / TNATIVE_H
+    local scale = math.clamp(math.min(1, sx, sy), 0.45, 1)
+    TScale.Scale = scale
+    TWin.Position = UDim2.new(
+        0.5, TNATIVE_W * (1 - scale) / 2,
+        0.5, TNATIVE_H * (1 - scale) / 2
+    )
+end
+
+updateTetrisScale()
+
+local function hookTetrisCamera(cam)
+    if not cam then return end
+    connect(cam:GetPropertyChangedSignal("ViewportSize"), updateTetrisScale)
+end
+
+hookTetrisCamera(Workspace.CurrentCamera)
+connect(Workspace:GetPropertyChangedSignal("CurrentCamera"), function()
+    updateTetrisScale()
+    hookTetrisCamera(Workspace.CurrentCamera)
+end)
 
 local THeader = create("TextButton", {
     Active = true, AutoButtonColor = false,
@@ -2790,7 +1851,7 @@ UI.Stroke(TNextFrame, C.Purple, 0.35)
 
 create("TextLabel", {
     Position = UDim2.new(0,0,0,4), Size = UDim2.new(1,0,0,18),
-    BackgroundTransparency = 1, Text = "PRÓXIMA",
+    BackgroundTransparency = 1, Text = "NEXT",
     TextColor3 = C.Muted, TextSize = 10, Font = Enum.Font.GothamBold,
 }, TNextFrame)
 
@@ -2841,10 +1902,10 @@ local function makeStat(parent, order, label)
     }, parent)
 end
 
-local TScoreLbl = makeStat(TStats, 4, "PONTOS")
-local TLinesLbl = makeStat(TStats, 30, "LINHAS")
-local TLevelLbl = makeStat(TStats, 56, "NÍVEL")
-local TBestLbl  = makeStat(TStats, 82, "RECORDE")
+local TScoreLbl = makeStat(TStats, 4, "SCORE")
+local TLinesLbl = makeStat(TStats, 30, "LINES")
+local TLevelLbl = makeStat(TStats, 56, "LEVEL")
+local TBestLbl  = makeStat(TStats, 82, "BEST")
 
 local TCtrl = create("Frame", {
     Position = UDim2.fromOffset(15, 430),
@@ -2891,13 +1952,13 @@ local RestartBtn = create("TextButton", {
     Position = UDim2.fromScale(0.5, 0.6),
     Size = UDim2.fromOffset(120, 36),
     BackgroundColor3 = C.Blue, BorderSizePixel = 0,
-    Text = "REINICIAR", TextColor3 = C.Text,
+    Text = "RESTART", TextColor3 = C.Text,
     TextSize = 13, Font = Enum.Font.GothamBold, ZIndex = 6,
 }, GameOverOverlay)
 UI.Round(RestartBtn, 6)
 
 ----------------------------------------------------------------
--- ✅ TETRIS: lógica do jogo
+-- TETRIS: LOGIC
 ----------------------------------------------------------------
 
 local board, curPiece, nxtPiece
@@ -2955,7 +2016,6 @@ local function lockPiece()
             end
         end
     end
-
     local cleared = 0
     for r = TROWS, 1, -1 do
         local full = true
@@ -2969,7 +2029,6 @@ local function lockPiece()
             for c = 1, TCOLS do board[1][c] = nil end
         end
     end
-
     if cleared > 0 then
         local pts = {0, 100, 300, 500, 800}
         score = score + pts[cleared] * level
@@ -2978,11 +2037,9 @@ local function lockPiece()
         dropInt = math.max(0.1, 0.8 - (level - 1) * 0.06)
         if score > best then best = score end
     end
-
     curPiece = nxtPiece
     curPiece.x, curPiece.y = 4, 1
     nxtPiece = randomPiece()
-
     if not fits(curPiece.shape, curPiece.x, curPiece.y) then
         over = true
         running = false
@@ -3025,7 +2082,7 @@ local function hardDrop()
     lockPiece()
 end
 
-local function render()
+local function renderTetris()
     for r = 1, TROWS do
         for c = 1, TCOLS do
             local cell = TCells[r][c]
@@ -3087,7 +2144,7 @@ local function startGame()
     running = true
     GameOverOverlay.Visible = false
     lastTick = os.clock()
-    render()
+    renderTetris()
 end
 
 if gameConn then gameConn:Disconnect() end
@@ -3100,22 +2157,16 @@ gameConn = RunService.Heartbeat:Connect(function()
         dropAcc = 0
         moveDown()
     end
-    render()
+    renderTetris()
 end)
 table.insert(Connections, gameConn)
 
-----------------------------------------------------------------
--- ✅ TETRIS: abrir / fechar / controles
-----------------------------------------------------------------
-
 local function openTetris()
     TetrisGUI.Enabled = true
+    updateTetrisScale()
     if not running then startGame() end
     stopPersonalMusic()
-    task.spawn(function()
-        local ok, err = playPersonalMusic("Tetris Theme", true)
-        if not ok then warn("[TETRIS MUSIC] " .. tostring(err)) end
-    end)
+    task.spawn(function() playPersonalMusic("Tetris Theme", true) end)
 end
 
 local function closeTetris()
@@ -3123,29 +2174,19 @@ local function closeTetris()
     running = false
     stopPersonalMusic()
     if selectedMusic and selectedMusic ~= "None" then
-        task.spawn(function()
-            playPersonalMusic(selectedMusic, false)
-        end)
+        task.spawn(function() playPersonalMusic(selectedMusic, false) end)
     end
 end
 
-UI.Button(TetrisPage, "🎮  ABRIR JOGO DO TETRIS", function()
-    openTetris()
-end, 50)
-
--- ✅ TETRIS: botão bônus na Home
-UI.Button(HomePage, "🎮  JOGAR TETRIS", function()
-    openTetris()
-end, 42)
-
+UI.Button(TetrisPage, "🎮  OPEN TETRIS GAME", function() openTetris() end, 50)
+UI.Button(HomePage, "🎮  PLAY TETRIS", function() openTetris() end, 42)
 connect(TClose.Activated, closeTetris)
 connect(RestartBtn.Activated, function() startGame() end)
 
 local function holdBtn(btn, action)
     local holding = false
     connect(btn.InputBegan, function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-           or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
             holding = true
             action()
             task.spawn(function()
@@ -3154,9 +2195,7 @@ local function holdBtn(btn, action)
             end)
         end
     end)
-    connect(btn.InputEnded, function()
-        holding = false
-    end)
+    connect(btn.InputEnded, function() holding = false end)
 end
 
 holdBtn(BtnLeft, moveLeft)
@@ -3178,16 +2217,14 @@ end)
 
 local tDrag, tStart, tStartPos = false, nil, nil
 connect(THeader.InputBegan, function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-       or input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         tDrag = true
         tStart = input.Position
         tStartPos = TWin.Position
     end
 end)
 connect(UserInputService.InputChanged, function(input)
-    if tDrag and (input.UserInputType == Enum.UserInputType.MouseMovement
-                  or input.UserInputType == Enum.UserInputType.Touch) then
+    if tDrag and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local d = input.Position - tStart
         TWin.Position = UDim2.new(
             tStartPos.X.Scale, tStartPos.X.Offset + d.X,
@@ -3196,15 +2233,322 @@ connect(UserInputService.InputChanged, function(input)
     end
 end)
 connect(UserInputService.InputEnded, function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-       or input.UserInputType == Enum.UserInputType.Touch then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         tDrag = false
     end
 end)
 
+task.spawn(function() preparePersonalAudio("Music", "Tetris Theme") end)
+
+----------------------------------------------------------------
+-- CREDITS: Roblox API fetch
+----------------------------------------------------------------
+
+local function fetchRobloxUser(username)
+    local ok, response = pcall(function()
+        return HttpService:PostAsync(
+            "https://users.roblox.com/v1/usernames/users",
+            HttpService:JSONEncode({ usernames = { username } }),
+            Enum.HttpContentType.ApplicationJson
+        )
+    end)
+    if not ok or type(response) ~= "string" then return nil, "HTTP failed" end
+    local decodeOk, data = pcall(function() return HttpService:JSONDecode(response) end)
+    if not decodeOk or not data.data or #data.data == 0 then return nil, "User not found" end
+    local user = data.data[1]
+    local userId = user.id
+    local displayName = user.displayName or user.name
+    local thumbOk, thumbResponse = pcall(function()
+        return game:HttpGet("https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds="
+            .. tostring(userId) .. "&size=150x150&format=Png&isCircular=false")
+    end)
+    local avatarUrl = nil
+    if thumbOk and type(thumbResponse) == "string" then
+        local thumbDecodeOk, thumbData = pcall(function() return HttpService:JSONDecode(thumbResponse) end)
+        if thumbDecodeOk and thumbData.data and #thumbData.data > 0 then
+            avatarUrl = thumbData.data[1].imageUrl
+        end
+    end
+    return {
+        id = userId,
+        username = user.name,
+        displayName = displayName,
+        avatar = avatarUrl,
+    }
+end
+
+----------------------------------------------------------------
+-- CREDITS PAGE — automatic classic-style scrolling credits
+----------------------------------------------------------------
+
+-- "down" = content falls downward (as you requested) / "up" = rises like movie credits
+local CREDITS_DIRECTION = "down"
+local CREDITS_SPEED = 30
+
+local SponsorsData = {
+    { username = "catblue",    role = "Sponsor" },
+    { username = "sorvetepro", role = "Sponsor" },
+}
+local AdminsData = {
+    { username = "sorvetepro", role = "Administrator / Creator" },
+}
+
+local CreditsCache = { sponsors = {}, admins = {} }
+
+local function loadCreditsCache()
+    local function enrich(list, out)
+        for _, entry in ipairs(list) do
+            local data = fetchRobloxUser(entry.username)
+            if data then
+                table.insert(out, { data = data, role = entry.role })
+            else
+                table.insert(out, {
+                    data = { username = entry.username, displayName = entry.username, avatar = nil },
+                    role = entry.role .. " (offline)",
+                })
+            end
+        end
+    end
+    enrich(SponsorsData, CreditsCache.sponsors)
+    enrich(AdminsData, CreditsCache.admins)
+end
+
+local CreditsPage = create("Frame", {
+    Name = "CreditsPage",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    Visible = false,
+    ClipsDescendants = true,
+}, PageHost)
+
+Pages["Credits"] = CreditsPage
+addTab("Credits", "CREDITS", 12)
+
+local CreditsScroll = create("Frame", {
+    Name = "ScrollContent",
+    Size = UDim2.new(1, 0, 0, 0),
+    AutomaticSize = Enum.AutomaticSize.Y,
+    BackgroundTransparency = 1,
+    Position = UDim2.new(0, 0, 0, 0),
+}, CreditsPage)
+
+local function renderUserCard(parent, userData, roleLabel, layoutOrder)
+    local card = create("Frame", {
+        Size = UDim2.new(1, -10, 0, 68),
+        BackgroundColor3 = C.PanelAlt,
+        BorderSizePixel = 0,
+        LayoutOrder = layoutOrder,
+    }, parent)
+    UI.Round(card, 8)
+    UI.Stroke(card, C.Purple, 0.5)
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 5)
+    pad.PaddingBottom = UDim.new(0, 5)
+    pad.PaddingLeft = UDim.new(0, 7)
+    pad.PaddingRight = UDim.new(0, 7)
+    pad.Parent = card
+
+    local avatarFrame = create("Frame", {
+        Position = UDim2.fromOffset(0, 0),
+        Size = UDim2.fromOffset(56, 56),
+        BackgroundColor3 = C.Background,
+        BorderSizePixel = 0,
+    }, card)
+    UI.Round(avatarFrame, 6)
+    UI.Stroke(avatarFrame, C.Blue, 0.3)
+
+    if userData.avatar then
+        local img = create("ImageLabel", {
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            Image = userData.avatar,
+        }, avatarFrame)
+        UI.Round(img, 6)
+    else
+        create("TextLabel", {
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            Text = "?",
+            TextColor3 = C.Muted,
+            TextSize = 20,
+            Font = Enum.Font.GothamBold,
+        }, avatarFrame)
+    end
+
+    create("TextLabel", {
+        Position = UDim2.fromOffset(66, 4),
+        Size = UDim2.new(1, -72, 0, 22),
+        BackgroundTransparency = 1,
+        Text = userData.displayName or userData.username,
+        TextColor3 = C.Text,
+        TextSize = 13,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+    }, card)
+
+    create("TextLabel", {
+        Position = UDim2.fromOffset(66, 22),
+        Size = UDim2.new(1, -72, 0, 15),
+        BackgroundTransparency = 1,
+        Text = "@" .. userData.username,
+        TextColor3 = C.Muted,
+        TextSize = 10,
+        Font = Enum.Font.Code,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, card)
+
+    create("TextLabel", {
+        Position = UDim2.fromOffset(66, 38),
+        Size = UDim2.new(1, -72, 0, 18),
+        BackgroundTransparency = 1,
+        Text = roleLabel or "",
+        TextColor3 = C.Purple,
+        TextSize = 10,
+        Font = Enum.Font.GothamBold,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, card)
+end
+
+local creditsOrderBase = 0
+local function renderCreditsCopy()
+    creditsOrderBase = creditsOrderBase + 1000
+    local base = creditsOrderBase
+    local copy = create("Frame", {
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        LayoutOrder = base,
+    }, CreditsScroll)
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 10)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.Parent = copy
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 50)
+    pad.PaddingBottom = UDim.new(0, 50)
+    pad.PaddingLeft = UDim.new(0, 6)
+    pad.PaddingRight = UDim.new(0, 6)
+    pad.Parent = copy
+
+    create("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 44),
+        BackgroundTransparency = 1,
+        Text = "★  EPIC PLANETS  ★",
+        TextColor3 = C.Purple,
+        TextSize = 22,
+        Font = Enum.Font.GothamBlack,
+        LayoutOrder = base + 1,
+    }, copy)
+
+    create("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 24),
+        BackgroundTransparency = 1,
+        Text = "— Credits —",
+        TextColor3 = C.Muted,
+        TextSize = 12,
+        Font = Enum.Font.Gotham,
+        LayoutOrder = base + 2,
+    }, copy)
+
+    create("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 32),
+        BackgroundTransparency = 1,
+        Text = "SPONSORS",
+        TextColor3 = C.Blue,
+        TextSize = 15,
+        Font = Enum.Font.GothamBlack,
+        LayoutOrder = base + 10,
+    }, copy)
+
+    local o = base + 20
+    for _, entry in ipairs(CreditsCache.sponsors) do
+        renderUserCard(copy, entry.data, entry.role, o)
+        o = o + 1
+    end
+
+    create("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 32),
+        BackgroundTransparency = 1,
+        Text = "ADMINISTRATORS",
+        TextColor3 = C.Red,
+        TextSize = 15,
+        Font = Enum.Font.GothamBlack,
+        LayoutOrder = base + 200,
+    }, copy)
+
+    o = base + 210
+    for _, entry in ipairs(CreditsCache.admins) do
+        renderUserCard(copy, entry.data, entry.role, o)
+        o = o + 1
+    end
+
+    create("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 70),
+        BackgroundTransparency = 1,
+        Text = "Thanks for using Epic Planets!\n♥",
+        TextColor3 = C.Muted,
+        TextSize = 12,
+        Font = Enum.Font.Gotham,
+        TextWrapped = true,
+        LayoutOrder = base + 500,
+    }, copy)
+
+    return copy
+end
+
 task.spawn(function()
-    local _, err = preparePersonalAudio("Music", "Tetris Theme")
-    if err then warn("[TETRIS] Preload: " .. tostring(err)) end
+    local loadingLabel = create("TextLabel", {
+        Size = UDim2.new(1, 0, 0, 40),
+        Position = UDim2.new(0, 0, 0.5, -20),
+        BackgroundTransparency = 1,
+        Text = "Loading credits...",
+        TextColor3 = C.Muted,
+        TextSize = 13,
+        Font = Enum.Font.Gotham,
+    }, CreditsPage)
+
+    loadCreditsCache()
+    loadingLabel:Destroy()
+
+    local copies = {}
+    for i = 1, 2 do
+        table.insert(copies, renderCreditsCopy())
+    end
+
+    task.wait(0.25)
+
+    local function startLoop()
+        local copyHeight = copies[1] and copies[1].AbsoluteSize.Y or 0
+        if copyHeight <= 0 then
+            task.wait(0.4)
+            startLoop()
+            return
+        end
+        local duration = copyHeight / CREDITS_SPEED
+        while CreditsPage.Parent and ENV.__EPIC_PLANETS_RUNNING do
+            local fromPos, toPos
+            if CREDITS_DIRECTION == "down" then
+                fromPos = UDim2.new(0, 0, 0, -copyHeight)
+                toPos   = UDim2.new(0, 0, 0, 0)
+            else
+                fromPos = UDim2.new(0, 0, 0, 0)
+                toPos   = UDim2.new(0, 0, 0, -copyHeight)
+            end
+            CreditsScroll.Position = fromPos
+            local tw = TweenService:Create(
+                CreditsScroll,
+                TweenInfo.new(duration, Enum.EasingStyle.Linear),
+                { Position = toPos }
+            )
+            tw:Play()
+            tw.Completed:Wait()
+        end
+    end
+
+    startLoop()
 end)
 
 ----------------------------------------------------------------
@@ -3214,29 +2558,24 @@ end)
 BuiltinModules.Initialized = true
 ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
 
-addLog("INFO", "EPIC PLANETS initialized; ScriptBlox store, Logs and Tetris registered")
+addLog("INFO", "EPIC PLANETS initialized; Tetris and Credits registered")
 refreshLogsPage()
 showPage("Home")
 setStatus("Loading intro")
 
 print("[EPIC PLANETS] Main.lua loaded.")
 print("[EPIC PLANETS] BuiltinModules " .. BuiltinModules.Version)
-print("[EPIC PLANETS] Tetris GUI registered.")
+print("[EPIC PLANETS] Tetris + Credits registered.")
 
 if flashSound then
-    print("[EPIC PLANETS AUDIO] Ready for intro flash.")
+    print("[EPIC PLANETS AUDIO] Ready.")
 else
-    addLog("WARN", "Audio unavailable; interface will still load.")
-    warn("[EPIC PLANETS AUDIO] Audio unavailable; interface will still load.")
+    addLog("WARN", "Audio unavailable.")
 end
 
 task.spawn(function()
-    local ok, err = pcall(function()
-        BuiltinModules.Animations.PlayIntro()
-    end)
-
+    local ok, err = pcall(function() BuiltinModules.Animations.PlayIntro() end)
     if not ok then
         addLog("ERROR", "Intro error: " .. tostring(err))
-        warn("[EPIC PLANETS] Intro error: " .. tostring(err))
     end
 end)
