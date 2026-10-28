@@ -1,6 +1,6 @@
 --[[
     EPIC PLANETS
-    Main.lua + BuiltinModules + Rainbow Blur Backdrop + Responsive Tetris + Back Easing
+    Main.lua + BuiltinModules + Bottom-Layer Rainbow Blur + Responsive Tetris + Back Easing
     Delta / Android
 
     BuiltinModules:
@@ -367,7 +367,7 @@ function BuiltinModules.UI.Stroke(object, color, transparency)
     return stroke
 end
 
--- ✨ Blur/Aura por trás das janelas (agora integrado no loop arco-íris)
+-- ✨ Blur/Aura na camada mais funda de todas (ZIndex = -1 / O último de baixo)
 function BuiltinModules.UI.AddGuiBlurBackdrop(parent)
     local blurShadow = create("ImageLabel", {
         Name = "GuiBlurBackdrop",
@@ -380,7 +380,7 @@ function BuiltinModules.UI.AddGuiBlurBackdrop(parent)
         ImageTransparency = 0.45,
         ScaleType = Enum.ScaleType.Slice,
         SliceCenter = Rect.new(49, 49, 450, 450),
-        ZIndex = math.max(0, (parent.ZIndex or 1) - 1),
+        ZIndex = -1,
     }, parent)
     return blurShadow
 end
@@ -3257,7 +3257,7 @@ end)
 BuiltinModules.Initialized = true
 ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
 
-addLog("INFO", "EPIC PLANETS initialized with Rainbow Backdrop Blur & Back Easing")
+addLog("INFO", "EPIC PLANETS initialized with Bottom-Layer Rainbow Blur & Back Easing")
 refreshLogsPage()
 showPage("Home")
 setStatus("Loading intro")
