@@ -1,6 +1,6 @@
 --[[
     EPIC PLANETS
-    Main.lua + BuiltinModules + Tetris GUI + GUI Back Easing + Local GUI Aura Backdrop
+    Main.lua + BuiltinModules + Responsive Tetris GUI + GUI Back Easing + Local GUI Aura Backdrop
     Delta / Android
 
     BuiltinModules:
@@ -2717,7 +2717,7 @@ info(TetrisPage, "PC: ← → mover · ↑/W rotacionar · ↓/S descer · Espa�
 info(TetrisPage, "Mobile: use os botões na tela do jogo", 24)
 
 ----------------------------------------------------------------
--- TETRIS GUI (janela separada)
+-- TETRIS GUI (Janela Responsiva Ajustada para Celular)
 ----------------------------------------------------------------
 
 local TetrisGUI = create("ScreenGui", {
@@ -2731,7 +2731,7 @@ local TetrisGUI = create("ScreenGui", {
 
 ENV.__EPIC_PLANETS_TETRIS_GUI = TetrisGUI
 
-local TCOLS, TROWS, TCELL = 10, 20, 18
+local TCOLS, TROWS, TCELL = 10, 20, 15
 
 local SHAPES = {
     I = {{0,0,0,0},{1,1,1,1},{0,0,0,0},{0,0,0,0}},
@@ -2753,38 +2753,42 @@ local TWin = create("Frame", {
     Name = "Window",
     AnchorPoint = Vector2.new(0.5, 0.5),
     Position = UDim2.fromScale(0.5, 0.5),
-    Size = UDim2.fromOffset(400, 580),
+    Size = UDim2.new(0, 330, 0, 480),
     BackgroundColor3 = C.Panel,
     BorderSizePixel = 0,
 }, TetrisGUI)
 
 UI.AddGuiBlurBackdrop(TWin)
-
 UI.Round(TWin, 12)
 UI.Stroke(TWin, C.Purple, 0.05)
 
+local tWinConstraint = Instance.new("UISizeConstraint")
+tWinConstraint.MinSize = Vector2.new(280, 420)
+tWinConstraint.MaxSize = Vector2.new(350, 500)
+tWinConstraint.Parent = TWin
+
 local THeader = create("TextButton", {
     Active = true, AutoButtonColor = false,
-    Position = UDim2.new(0, 12, 0, 8),
-    Size = UDim2.new(1, -90, 0, 28),
+    Position = UDim2.new(0, 10, 0, 6),
+    Size = UDim2.new(1, -75, 0, 26),
     BackgroundTransparency = 1,
     Text = "TETRIS  ♪", TextColor3 = C.Text,
-    TextSize = 18, Font = Enum.Font.GothamBlack,
+    TextSize = 16, Font = Enum.Font.GothamBlack,
     TextXAlignment = Enum.TextXAlignment.Left,
 }, TWin)
 
 local TClose = create("TextButton", {
-    Position = UDim2.new(1, -42, 0, 8),
-    Size = UDim2.fromOffset(30, 28),
+    Position = UDim2.new(1, -36, 0, 6),
+    Size = UDim2.fromOffset(26, 26),
     BackgroundColor3 = C.PanelAlt, BorderSizePixel = 0,
-    Text = "×", TextColor3 = C.Text, TextSize = 19,
+    Text = "×", TextColor3 = C.Text, TextSize = 17,
     Font = Enum.Font.GothamBold,
 }, TWin)
 UI.Round(TClose, 6)
 UI.Stroke(TClose, C.Purple, 0.3)
 
 local TBoard = create("Frame", {
-    Position = UDim2.fromOffset(15, 55),
+    Position = UDim2.fromOffset(10, 38),
     Size = UDim2.fromOffset(TCOLS * TCELL, TROWS * TCELL),
     BackgroundColor3 = C.Background, BorderSizePixel = 0,
 }, TWin)
@@ -2808,23 +2812,23 @@ for r = 1, TROWS do
 end
 
 local TNextFrame = create("Frame", {
-    Position = UDim2.fromOffset(210, 55),
-    Size = UDim2.fromOffset(175, 130),
+    Position = UDim2.fromOffset(170, 38),
+    Size = UDim2.fromOffset(150, 100),
     BackgroundColor3 = C.Background, BorderSizePixel = 0,
 }, TWin)
 UI.Round(TNextFrame, 6)
 UI.Stroke(TNextFrame, C.Purple, 0.35)
 
 create("TextLabel", {
-    Position = UDim2.new(0,0,0,4), Size = UDim2.new(1,0,0,18),
+    Position = UDim2.new(0,0,0,2), Size = UDim2.new(1,0,0,16),
     BackgroundTransparency = 1, Text = "PRÓXIMA",
-    TextColor3 = C.Muted, TextSize = 10, Font = Enum.Font.GothamBold,
+    TextColor3 = C.Muted, TextSize = 9, Font = Enum.Font.GothamBold,
 }, TNextFrame)
 
-local NCELL = 20
+local NCELL = 16
 local TNextGrid = create("Frame", {
     AnchorPoint = Vector2.new(0.5, 0.5),
-    Position = UDim2.new(0.5, 0, 0.5, 8),
+    Position = UDim2.new(0.5, 0, 0.5, 6),
     Size = UDim2.fromOffset(4*NCELL, 4*NCELL),
     BackgroundTransparency = 1,
 }, TNextFrame)
@@ -2844,8 +2848,8 @@ for r = 1, 4 do
 end
 
 local TStats = create("Frame", {
-    Position = UDim2.fromOffset(210, 195),
-    Size = UDim2.fromOffset(175, 130),
+    Position = UDim2.fromOffset(170, 144),
+    Size = UDim2.fromOffset(150, 150),
     BackgroundColor3 = C.Background, BorderSizePixel = 0,
 }, TWin)
 UI.Round(TStats, 6)
@@ -2853,29 +2857,29 @@ UI.Stroke(TStats, C.Purple, 0.35)
 
 local function makeStat(parent, order, label)
     create("TextLabel", {
-        Position = UDim2.new(0,8,0,order), Size = UDim2.new(1,-16,0,20),
+        Position = UDim2.new(0,6,0,order), Size = UDim2.new(1,-12,0,18),
         BackgroundTransparency = 1, Text = label,
-        TextColor3 = C.Muted, TextSize = 11,
+        TextColor3 = C.Muted, TextSize = 10,
         Font = Enum.Font.GothamBold,
         TextXAlignment = Enum.TextXAlignment.Left,
     }, parent)
     return create("TextLabel", {
-        Position = UDim2.new(0,8,0,order), Size = UDim2.new(1,-16,0,20),
+        Position = UDim2.new(0,6,0,order), Size = UDim2.new(1,-12,0,18),
         BackgroundTransparency = 1, Text = "0",
-        TextColor3 = C.Text, TextSize = 13,
+        TextColor3 = C.Text, TextSize = 11,
         Font = Enum.Font.Code,
         TextXAlignment = Enum.TextXAlignment.Right,
     }, parent)
 end
 
 local TScoreLbl = makeStat(TStats, 4, "PONTOS")
-local TLinesLbl = makeStat(TStats, 30, "LINHAS")
-local TLevelLbl = makeStat(TStats, 56, "NÍVEL")
-local TBestLbl  = makeStat(TStats, 82, "RECORDE")
+local TLinesLbl = makeStat(TStats, 40, "LINHAS")
+local TLevelLbl = makeStat(TStats, 76, "NÍVEL")
+local TBestLbl  = makeStat(TStats, 112, "RECORDE")
 
 local TCtrl = create("Frame", {
-    Position = UDim2.fromOffset(15, 430),
-    Size = UDim2.new(1, -30, 0, 130),
+    Position = UDim2.fromOffset(10, 345),
+    Size = UDim2.new(1, -20, 0, 120),
     BackgroundTransparency = 1,
 }, TWin)
 
@@ -2885,21 +2889,21 @@ local function tbtn(x, y, w, h, txt, col)
         Size = UDim2.fromOffset(w, h),
         BackgroundColor3 = col or C.PanelAlt,
         BorderSizePixel = 0, Text = txt, TextColor3 = C.Text,
-        TextSize = 18, Font = Enum.Font.GothamBlack,
+        TextSize = 16, Font = Enum.Font.GothamBlack,
     }, TCtrl)
-    UI.Round(b, 8)
+    UI.Round(b, 7)
     UI.Stroke(b, C.Purple, 0.4)
     return b
 end
 
-local BtnLeft  = tbtn(0, 40, 60, 55, "◀")
-local BtnDown  = tbtn(65, 40, 60, 55, "▼")
-local BtnRight = tbtn(130, 40, 60, 55, "▶")
-local BtnRot   = tbtn(200, 40, 60, 55, "↻", C.Blue)
-local BtnDrop  = tbtn(265, 40, 55, 55, "⤓", C.Purple)
+local BtnLeft  = tbtn(0, 32, 50, 44, "◀")
+local BtnDown  = tbtn(55, 32, 50, 44, "▼")
+local BtnRight = tbtn(110, 32, 50, 44, "▶")
+local BtnRot   = tbtn(165, 32, 50, 44, "↻", C.Blue)
+local BtnDrop  = tbtn(220, 32, 85, 44, "⤓ DROP", C.Purple)
 
 local GameOverOverlay = create("Frame", {
-    Position = UDim2.fromOffset(15, 55),
+    Position = UDim2.fromOffset(10, 38),
     Size = UDim2.fromOffset(TCOLS*TCELL, TROWS*TCELL),
     BackgroundColor3 = Color3.fromRGB(0,0,0),
     BackgroundTransparency = 0.35,
@@ -2908,18 +2912,18 @@ local GameOverOverlay = create("Frame", {
 UI.Round(GameOverOverlay, 4)
 
 create("TextLabel", {
-    Position = UDim2.new(0,0,0.35,0), Size = UDim2.new(1,0,0,36),
+    Position = UDim2.new(0,0,0.35,0), Size = UDim2.new(1,0,0,30),
     BackgroundTransparency = 1, Text = "GAME OVER",
-    TextColor3 = C.Red, TextSize = 22, Font = Enum.Font.GothamBlack,
+    TextColor3 = C.Red, TextSize = 18, Font = Enum.Font.GothamBlack,
 }, GameOverOverlay)
 
 local RestartBtn = create("TextButton", {
     AnchorPoint = Vector2.new(0.5,0.5),
     Position = UDim2.fromScale(0.5, 0.6),
-    Size = UDim2.fromOffset(120, 36),
+    Size = UDim2.fromOffset(100, 32),
     BackgroundColor3 = C.Blue, BorderSizePixel = 0,
     Text = "REINICIAR", TextColor3 = C.Text,
-    TextSize = 13, Font = Enum.Font.GothamBold, ZIndex = 6,
+    TextSize = 12, Font = Enum.Font.GothamBold, ZIndex = 6,
 }, GameOverOverlay)
 UI.Round(RestartBtn, 6)
 
