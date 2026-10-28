@@ -1,6 +1,6 @@
 --[[
     EPIC PLANETS
-    Main.lua + BuiltinModules + Tetris GUI + GUI Back Easing + UI Glass Blur
+    Main.lua + BuiltinModules + Tetris GUI + GUI Back Easing + Local GUI Aura Backdrop
     Delta / Android
 
     BuiltinModules:
@@ -367,20 +367,19 @@ function BuiltinModules.UI.Stroke(object, color, transparency)
     return stroke
 end
 
--- ✨ Função para criar aura / blur estético por trás das GUIs principais
 function BuiltinModules.UI.AddGuiBlurBackdrop(parent)
     local blurShadow = create("ImageLabel", {
         Name = "GuiBlurBackdrop",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.new(1, 46, 1, 46),
+        Size = UDim2.new(1, 48, 1, 48),
         BackgroundTransparency = 1,
-        Image = "rbxassetid://6014261993", -- Textura suave estilo sombra difusa/blur
+        Image = "rbxassetid://6014261993",
         ImageColor3 = Color3.fromRGB(0, 0, 0),
-        ImageTransparency = 0.45,
+        ImageTransparency = 0.35,
         ScaleType = Enum.ScaleType.Slice,
         SliceCenter = Rect.new(49, 49, 450, 450),
-        ZIndex = parent.ZIndex - 1,
+        ZIndex = math.max(0, (parent.ZIndex or 1) - 1),
     }, parent)
     return blurShadow
 end
@@ -735,7 +734,6 @@ local Hub = create("Frame", {
     Visible = false,
 }, GUI)
 
--- ✨ Blur atrás da Hub principal
 UI.AddGuiBlurBackdrop(Hub)
 
 local hubConstraint = Instance.new("UISizeConstraint")
@@ -827,7 +825,6 @@ local Status = create("TextLabel", {
 
 ENV.__EPIC_PLANETS_STATUS = Status
 
--- ✨ EP Icon (sem blur/glow no ícone, conforme solicitado)
 local Mini = create("TextButton", {
     Name = "EP_MiniIcon",
     AnchorPoint = Vector2.new(0, 0.5),
@@ -2379,7 +2376,6 @@ connect(TapIn.Activated, function()
     Hub.Size = UDim2.new(0.84, 0, 0.68, 0)
     Hub.BackgroundTransparency = 1
 
-    -- ✨ Animação com Back Easing ultrapassando o destino levemente antes de esticar
     tween(Hub, 0.35, {
         Size = UDim2.new(0.91, 0, 0.74, 0),
         BackgroundTransparency = 0,
@@ -2762,7 +2758,6 @@ local TWin = create("Frame", {
     BorderSizePixel = 0,
 }, TetrisGUI)
 
--- ✨ Blur atrás da janela do Tetris também
 UI.AddGuiBlurBackdrop(TWin)
 
 UI.Round(TWin, 12)
@@ -3245,7 +3240,7 @@ end)
 BuiltinModules.Initialized = true
 ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
 
-addLog("INFO", "EPIC PLANETS initialized with GUI Backdrop Blur and Back Easing")
+addLog("INFO", "EPIC PLANETS initialized with GUI Backdrop Blur & Back Easing")
 refreshLogsPage()
 showPage("Home")
 setStatus("Loading intro")
