@@ -1,6 +1,6 @@
 --[[
     EPIC PLANETS
-    Main.lua + BuiltinModules + Responsive Tetris GUI + GUI Back Easing + Local GUI Aura Backdrop
+    Main.lua + BuiltinModules + Rainbow Blur Backdrop + Responsive Tetris + Back Easing
     Delta / Android
 
     BuiltinModules:
@@ -367,6 +367,7 @@ function BuiltinModules.UI.Stroke(object, color, transparency)
     return stroke
 end
 
+-- ✨ Blur/Aura por trás das janelas (agora integrado no loop arco-íris)
 function BuiltinModules.UI.AddGuiBlurBackdrop(parent)
     local blurShadow = create("ImageLabel", {
         Name = "GuiBlurBackdrop",
@@ -375,8 +376,8 @@ function BuiltinModules.UI.AddGuiBlurBackdrop(parent)
         Size = UDim2.new(1, 48, 1, 48),
         BackgroundTransparency = 1,
         Image = "rbxassetid://6014261993",
-        ImageColor3 = Color3.fromRGB(0, 0, 0),
-        ImageTransparency = 0.35,
+        ImageColor3 = Color3.fromRGB(55, 145, 255),
+        ImageTransparency = 0.45,
         ScaleType = Enum.ScaleType.Slice,
         SliceCenter = Rect.new(49, 49, 450, 450),
         ZIndex = math.max(0, (parent.ZIndex or 1) - 1),
@@ -2572,14 +2573,17 @@ function BuiltinModules.Animations.PlayIntro()
 end
 
 ----------------------------------------------------------------
--- FLUID RAINBOW & RENDER LOOP
+-- FLUID RAINBOW & RAINBOW BLUR BACKDROPS & RENDER LOOP
 ----------------------------------------------------------------
 
 local rainbowObjects = {}
+local rainbowBackdrops = {}
 
 for _, object in ipairs(GUI:GetDescendants()) do
     if object:IsA("UIStroke") then
         table.insert(rainbowObjects, object)
+    elseif object:IsA("ImageLabel") and object.Name == "GuiBlurBackdrop" then
+        table.insert(rainbowBackdrops, object)
     end
 end
 
@@ -2592,6 +2596,13 @@ connect(RunService.RenderStepped, function()
             if stroke and stroke.Parent then
                 local offsetHue = (hue + (index * 0.004)) % 1
                 stroke.Color = Color3.fromHSV(offsetHue, 0.88, 1)
+            end
+        end
+
+        for index, backdrop in ipairs(rainbowBackdrops) do
+            if backdrop and backdrop.Parent then
+                local offsetHue = (hue + (index * 0.02)) % 1
+                backdrop.ImageColor3 = Color3.fromHSV(offsetHue, 0.75, 1)
             end
         end
 
@@ -2758,7 +2769,9 @@ local TWin = create("Frame", {
     BorderSizePixel = 0,
 }, TetrisGUI)
 
-UI.AddGuiBlurBackdrop(TWin)
+local tBlur = UI.AddGuiBlurBackdrop(TWin)
+table.insert(rainbowBackdrops, tBlur)
+
 UI.Round(TWin, 12)
 UI.Stroke(TWin, C.Purple, 0.05)
 
@@ -3244,7 +3257,7 @@ end)
 BuiltinModules.Initialized = true
 ENV.__EPIC_PLANETS_BUILTINMODULES = BuiltinModules
 
-addLog("INFO", "EPIC PLANETS initialized with GUI Backdrop Blur & Back Easing")
+addLog("INFO", "EPIC PLANETS initialized with Rainbow Backdrop Blur & Back Easing")
 refreshLogsPage()
 showPage("Home")
 setStatus("Loading intro")
